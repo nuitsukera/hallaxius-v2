@@ -21,3 +21,12 @@ model Upload {
   @@index([expiresAt])
   @@map("uploads")
 }
+
+model Domain {
+  id        String  @id @default(cuid())
+  domain    String  @unique
+  subdomain String?
+
+  @@index([domain])
+  @@map("domains")
+}

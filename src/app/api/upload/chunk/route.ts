@@ -31,7 +31,6 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Obter o corpo da requisição como ArrayBuffer
 		const arrayBuffer = await req.arrayBuffer();
 		const buffer = Buffer.from(arrayBuffer);
 
@@ -42,7 +41,6 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Fazer upload do chunk
 		await uploadChunk(uploadId, chunkIndexNum, buffer);
 
 		const response: ChunkUploadResponse = {

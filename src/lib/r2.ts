@@ -1,6 +1,5 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 
-// Cliente S3 configurado para Cloudflare R2
 let r2Client: S3Client | null = null;
 
 function getR2Client(): S3Client {
@@ -26,11 +25,8 @@ function getR2Client(): S3Client {
 	return r2Client;
 }
 
-const BUCKET_NAME = process.env.R2_BUCKET_NAME || "hallaxius";
+const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
-/**
- * Faz upload de um arquivo para o R2
- */
 export async function uploadToR2(
 	key: string,
 	body: Buffer | Uint8Array | ReadableStream,
@@ -48,9 +44,6 @@ export async function uploadToR2(
 	);
 }
 
-/**
- * Faz upload de um chunk temporário
- */
 export async function uploadChunk(
 	uploadId: string,
 	chunkIndex: number,
@@ -60,9 +53,6 @@ export async function uploadChunk(
 	await uploadToR2(key, body, "application/octet-stream");
 }
 
-/**
- * Lista todos os chunks de um upload
- */
 export async function listChunks(uploadId: string): Promise<string[]> {
 	const client = getR2Client();
 	const prefix = `temp/${uploadId}/`;
@@ -80,9 +70,6 @@ export async function listChunks(uploadId: string): Promise<string[]> {
 		.sort();
 }
 
-/**
- * Baixa um chunk do R2
- */
 export async function getChunk(key: string): Promise<Buffer> {
 	const client = getR2Client();
 
@@ -105,22 +92,17 @@ export async function getChunk(key: string): Promise<Buffer> {
 	return Buffer.concat(chunks);
 }
 
-/**
- * Junta todos os chunks em um arquivo final
- */
 export async function mergeChunks(
 	uploadId: string,
 	finalKey: string,
 	contentType: string,
 ): Promise<void> {
-	// Lista todos os chunks
 	const chunkKeys = await listChunks(uploadId);
 
 	if (chunkKeys.length === 0) {
 		throw new Error("No chunks found");
 	}
 
-	// Baixa e concatena todos os chunks
 	const buffers: Buffer[] = [];
 	for (const key of chunkKeys) {
 		const buffer = await getChunk(key);
@@ -129,16 +111,11 @@ export async function mergeChunks(
 
 	const finalBuffer = Buffer.concat(buffers);
 
-	// Faz upload do arquivo final
 	await uploadToR2(finalKey, finalBuffer, contentType);
 
-	// Remove os chunks temporários
 	await deleteChunks(uploadId);
 }
 
-/**
- * Remove todos os chunks de um upload
- */
 export async function deleteChunks(uploadId: string): Promise<void> {
 	const client = getR2Client();
 	const chunkKeys = await listChunks(uploadId);
@@ -153,9 +130,6 @@ export async function deleteChunks(uploadId: string): Promise<void> {
 	}
 }
 
-/**
- * Remove um arquivo do R2
- */
 export async function deleteFromR2(key: string): Promise<void> {
 	const client = getR2Client();
 
@@ -167,10 +141,9 @@ export async function deleteFromR2(key: string): Promise<void> {
 	);
 }
 
-/**
- * Gera URL pública para um arquivo
- */
-export function getPublicUrl(slug: string, filename: string): string {
-	const baseUrl = process.env.R2_PUBLIC_BASE_URL || "https://r2.hallaxi.us";
-	return `${baseUrl}/${slug}/${encodeURIComponent(filename)}`;
+export function getPublicUrl(slug: string, filename: string, domain?: string): string {
+	const baseUrl = domain 
+		? `https://${domain}` 
+		: process.env.R2_PUBLIC_BASE_URL;
+	return `${baseUrl}/${slug}`;
 }

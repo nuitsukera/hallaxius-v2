@@ -2,16 +2,17 @@ import { PrismaClient } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 
 const globalForPrisma = globalThis as unknown as {
-	prisma: ReturnType<typeof createPrismaClient> | undefined;
+	prisma: PrismaClient | undefined;
 };
 
 function createPrismaClient() {
-	return new PrismaClient({
+	const client = new PrismaClient({
 		log:
 			process.env.NODE_ENV === "development"
 				? ["query", "error", "warn"]
 				: ["error"],
-	}).$extends(withAccelerate());
+	});
+	return client;
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();

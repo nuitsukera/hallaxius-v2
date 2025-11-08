@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Clock, Globe, Upload, Copy, Check } from "lucide-react";
+import { Clock, Globe, Copy, Check, RefreshCw } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
 	Select,
@@ -24,8 +24,10 @@ import type {
 	ExpiresOption,
 	StartUploadResponse,
 	UploadResponse,
+	DomainOption,
 } from "@/types/uploads";
 import { CHUNK_SIZE, DIRECT_UPLOAD_LIMIT } from "@/types/uploads";
+import { getDomains, refreshDomains } from "@/lib/domains";
 
 const formatBytes = (bytes: number): string => {
 	if (bytes === 0) return "0 Bytes";
@@ -38,26 +40,56 @@ const formatBytes = (bytes: number): string => {
 };
 
 export default function UploadPage() {
-	const inputRef = useRef<HTMLInputElement | null>(null);
+	const fileInputRef = useRef<HTMLInputElement>(null);
 	const [selectedFile, setSelectedFile] = useState<File | null>(null);
-	const [expiresOption, setExpiresOption] = useState<ExpiresOption>("7d");
-	const [selectedDomain, setSelectedDomain] = useState("hallaxi.us");
-	const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-	const [isCopied, setIsCopied] = useState(false);
-	const [isUploading, setIsUploading] = useState(false);
 	const [uploadProgress, setUploadProgress] = useState(0);
+	const [isUploading, setIsUploading] = useState(false);
+	const [uploadUrl, setUploadUrl] = useState("");
+	const [copied, setCopied] = useState(false);
+	const [selectedDomain, setSelectedDomain] = useState("");
+	const [selectedExpires, setSelectedExpires] = useState<ExpiresOption>("7d");
+	const [domains, setDomains] = useState<DomainOption[]>([]);
+	const [isLoadingDomains, setIsLoadingDomains] = useState(true);
+	const [isRefreshingDomains, setIsRefreshingDomains] = useState(false);
+	const [refreshSuccess, setRefreshSuccess] = useState(false);
 
-	/**
-	 * Upload direto para arquivos pequenos (até 10MB)
-	 */
+	useEffect(() => {
+		const loadDomains = async () => {
+			try {
+				const data = await getDomains();
+				setDomains(data);
+				if (data.length > 0 && !selectedDomain) {
+					setSelectedDomain(data[0].value);
+				}
+			} catch (error) {
+				console.error("Error loading domains:", error);
+				toast.error("Failed to load domains", {
+					description: "Using default domain configuration",
+				});
+			} finally {
+				setIsLoadingDomains(false);
+			}
+		};
+
+		loadDomains();
+	}, [selectedDomain]);
+
 	const handleDirectUpload = async (file: File) => {
 		try {
+			console.log("[Frontend] Direct upload params:", {
+				filename: file.name,
+				filesize: file.size,
+				mimeType: file.type,
+				domain: selectedDomain,
+				expires: selectedExpires,
+			});
+
 			const params = new URLSearchParams({
 				filename: file.name,
 				filesize: file.size.toString(),
 				mimeType: file.type,
-				domain: selectedDomain,
-				expires: expiresOption,
+				domain: selectedDomain || "",
+				expires: selectedExpires,
 			});
 
 			const response = await fetch(`/api/upload/direct?${params}`, {
@@ -71,8 +103,8 @@ export default function UploadPage() {
 			}
 
 			const result: UploadResponse = await response.json();
-			setUploadedUrl(result.url);
-			setSelectedFile(null); // Limpar arquivo após upload bem-sucedido
+			setUploadUrl(result.url);
+			setSelectedFile(null);
 			toast.success("Upload complete!", {
 				description: `File uploaded successfully to ${result.url}`,
 			});
@@ -86,12 +118,16 @@ export default function UploadPage() {
 		}
 	};
 
-	/**
-	 * Upload chunked para arquivos grandes (acima de 10MB)
-	 */
 	const handleChunkedUpload = async (file: File) => {
 		try {
-			// 1. Iniciar upload
+			console.log("[Frontend] Chunked upload start params:", {
+				filename: file.name,
+				filesize: file.size,
+				mimeType: file.type,
+				domain: selectedDomain,
+				expires: selectedExpires,
+			});
+
 			const startResponse = await fetch("/api/upload/start", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -100,7 +136,7 @@ export default function UploadPage() {
 					filesize: file.size,
 					mimeType: file.type,
 					domain: selectedDomain,
-					expires: expiresOption,
+					expires: selectedExpires,
 				}),
 			});
 
@@ -112,15 +148,12 @@ export default function UploadPage() {
 			const startData: StartUploadResponse = await startResponse.json();
 			const { uploadId, slug, totalChunks } = startData;
 
-			// 2. Dividir arquivo em chunks e enviar
 			let uploadedChunks = 0;
-
 			for (let i = 0; i < totalChunks; i++) {
 				const start = i * CHUNK_SIZE;
 				const end = Math.min(start + CHUNK_SIZE, file.size);
 				const chunk = file.slice(start, end);
 
-				// Enviar chunk com retry
 				let retryCount = 0;
 				const maxRetries = 3;
 
@@ -152,13 +185,22 @@ export default function UploadPage() {
 						if (retryCount >= maxRetries) {
 							throw new Error(`Failed to upload chunk ${i} after ${maxRetries} attempts`);
 						}
-						// Aguardar antes de tentar novamente
 						await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));
 					}
 				}
 			}
 
-			// 3. Completar upload
+			console.log("[Frontend] Chunked upload complete params:", {
+				uploadId,
+				slug,
+				filename: file.name,
+				filesize: file.size,
+				mimeType: file.type,
+				domain: selectedDomain,
+				expires: selectedExpires,
+				totalChunks,
+			});
+
 			const completeResponse = await fetch("/api/upload/complete", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -169,7 +211,7 @@ export default function UploadPage() {
 					filesize: file.size,
 					mimeType: file.type,
 					domain: selectedDomain,
-					expires: expiresOption,
+					expires: selectedExpires,
 					totalChunks,
 				}),
 			});
@@ -180,8 +222,8 @@ export default function UploadPage() {
 			}
 
 			const result: UploadResponse = await completeResponse.json();
-			setUploadedUrl(result.url);
-			setSelectedFile(null); // Limpar arquivo após upload bem-sucedido
+			setUploadUrl(result.url);
+			setSelectedFile(null);
 			toast.success("Upload complete!", {
 				description: `File uploaded successfully to ${result.url}`,
 			});
@@ -195,32 +237,26 @@ export default function UploadPage() {
 		}
 	};
 
-	/**
-	 * Iniciar upload (detecta automaticamente o tipo)
-	 */
 	const handleUpload = async (file: File) => {
 		setIsUploading(true);
 		setUploadProgress(0);
 
 		try {
 			if (file.size <= DIRECT_UPLOAD_LIMIT) {
-				// Upload direto para arquivos pequenos
 				await handleDirectUpload(file);
 				setUploadProgress(100);
 			} else {
-				// Upload chunked para arquivos grandes
 				await handleChunkedUpload(file);
 			}
 		} catch (error) {
-			// Erro já tratado nas funções acima
 		} finally {
 			setIsUploading(false);
 		}
 	};
 
 	const handleSelectFile = () => {
-		if (inputRef.current) {
-			inputRef.current.click();
+		if (fileInputRef.current) {
+			fileInputRef.current.click();
 		}
 	};
 
@@ -237,44 +273,75 @@ export default function UploadPage() {
 			}
 
 			setSelectedFile(file);
-			setUploadedUrl(null);
-			
-			// Iniciar upload automaticamente
+			setUploadUrl("");
 			await handleUpload(file);
 		}
 
-		if (inputRef.current) {
-			inputRef.current.value = "";
+		if (fileInputRef.current) {
+			fileInputRef.current.value = "";
 		}
 	};
 
 	const handleClearFile = () => {
 		setSelectedFile(null);
-		setUploadedUrl(null);
+		setUploadUrl("");
 	};
 
 	const handleCopyUrl = () => {
-		if (uploadedUrl) {
-			navigator.clipboard.writeText(uploadedUrl);
-			setIsCopied(true);
+		if (uploadUrl) {
+			navigator.clipboard.writeText(uploadUrl);
+			setCopied(true);
 			toast.success("URL copied!", {
 				description: "Link copied to clipboard",
 			});
 
 			setTimeout(() => {
-				setIsCopied(false);
+				setCopied(false);
 			}, 2000);
+		}
+	};
+
+	const handleRefreshDomains = async () => {
+		if (isRefreshingDomains) return;
+		
+		setIsRefreshingDomains(true);
+		setRefreshSuccess(false);
+		
+		try {
+			const data = await refreshDomains();
+			setDomains(data);
+			const selectedStillExists = data.some(d => d.value === selectedDomain);
+			if (!selectedStillExists && data.length > 0) {
+				setSelectedDomain(data[0].value);
+			}
+			toast.success("Domains refreshed!", {
+				description: `Found ${data.length} domain${data.length !== 1 ? 's' : ''}`,
+			});
+			setRefreshSuccess(true);
+			setTimeout(() => {
+				setRefreshSuccess(false);
+			}, 2000);
+			setTimeout(() => {
+				setIsRefreshingDomains(false);
+			}, 6000);
+		} catch (error) {
+			console.error("Error refreshing domains:", error);
+			toast.error("Failed to refresh domains", {
+				description: error instanceof Error ? error.message : "Please try again later",
+			});
+			setTimeout(() => {
+				setIsRefreshingDomains(false);
+			}, 6000);
 		}
 	};
 
 	return (
 		<div className="w-full max-w-2xl lg:max-w-4xl mx-auto px-3 sm:px-4 md:px-6">
 			<input
-				ref={inputRef}
+				ref={fileInputRef}
 				type="file"
 				className="hidden"
 				onChange={handleFileInput}
-				// Upload desativado, mas select ainda pode ser aberto
 			/>
 
 			<div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -284,8 +351,8 @@ export default function UploadPage() {
 						<span>Expires</span>
 					</div>
 					<Tabs
-						value={expiresOption}
-						onValueChange={(value) => setExpiresOption(value as ExpiresOption)}
+						value={selectedExpires}
+						onValueChange={(value) => setSelectedExpires(value as ExpiresOption)}
 						className="w-full max-w-[400px]"
 					>
 						<TabsList className="w-full">
@@ -313,19 +380,62 @@ export default function UploadPage() {
 						<Globe className="h-4 w-4" />
 						<span>Domain</span>
 					</div>
-					<Select
-						value={selectedDomain}
-						onValueChange={setSelectedDomain}
-					>
-						<SelectTrigger className="w-full sm:w-48 md:w-64">
-							<SelectValue placeholder="Select domain" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="hallaxi.us">hallaxi.us</SelectItem>
-							<SelectItem value="cdn.hallaxi.us">cdn.hallaxi.us</SelectItem>
-							<SelectItem value="files.hallaxi.us">files.hallaxi.us</SelectItem>
-						</SelectContent>
-					</Select>
+					<div className="flex gap-2">
+						<Select
+							value={selectedDomain}
+							onValueChange={setSelectedDomain}
+							disabled={isLoadingDomains || domains.length === 0}
+						>
+							<SelectTrigger className="w-full sm:w-48 md:w-64">
+								<SelectValue 
+									placeholder={
+										isLoadingDomains 
+											? "Loading domains..." 
+											: domains.length === 0 
+												? "No domains available" 
+												: "Select domain"
+									} 
+								/>
+							</SelectTrigger>
+							<SelectContent>
+								{domains.length === 0 ? (
+									<div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
+										No domains available
+									</div>
+								) : (
+									domains.map((domain) => (
+										<SelectItem key={domain.id} value={domain.value}>
+											{domain.label}
+										</SelectItem>
+									))
+								)}
+							</SelectContent>
+						</Select>
+						<Button
+							onClick={handleRefreshDomains}
+							disabled={isRefreshingDomains || isLoadingDomains}
+							size="icon"
+							variant="outline"
+							className="shrink-0 relative cursor-pointer"
+						>
+							<RefreshCw 
+								className={`h-4 w-4 absolute transition-all duration-300 ${
+									refreshSuccess
+										? "opacity-0 scale-0 rotate-90"
+										: isRefreshingDomains 
+											? "animate-spin opacity-100 scale-100" 
+											: "opacity-100 scale-100 rotate-0"
+								}`} 
+							/>
+							<Check 
+								className={`h-4 w-4 absolute transition-all duration-300 ${
+									refreshSuccess
+										? "opacity-100 scale-100 rotate-0"
+										: "opacity-0 scale-0 -rotate-90"
+								}`}
+							/>
+						</Button>
+					</div>
 				</div>
 			</div>
 
@@ -403,10 +513,10 @@ export default function UploadPage() {
 				</div>
 			)}
 
-			{uploadedUrl && (
+			{uploadUrl && (
 				<div className="mt-6">
 					<div className="flex gap-2">
-						<Input value={uploadedUrl} readOnly className="flex-1" />
+						<Input value={uploadUrl} readOnly className="flex-1" />
 						<Button
 							onClick={handleCopyUrl}
 							size="icon"
@@ -414,14 +524,14 @@ export default function UploadPage() {
 						>
 							<Copy
 								className={`h-4 w-4 absolute transition-all duration-300 ${
-									isCopied
+									copied
 										? "opacity-0 scale-0 rotate-90"
 										: "opacity-100 scale-100 rotate-0"
 								}`}
 							/>
 							<Check
 								className={`h-4 w-4 absolute transition-all duration-300 ${
-									isCopied
+									copied
 										? "opacity-100 scale-100 rotate-0"
 										: "opacity-0 scale-0 -rotate-90"
 								}`}

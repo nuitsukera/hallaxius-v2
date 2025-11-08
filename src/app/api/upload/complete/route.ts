@@ -13,14 +13,22 @@ export async function POST(req: NextRequest) {
 	try {
 		const body = (await req.json()) as CompleteUploadRequest;
 
-		// Validações
+		console.log("[Complete Upload] Received body:", {
+			uploadId: body.uploadId,
+			slug: body.slug,
+			filename: body.filename,
+			filesize: body.filesize,
+			mimeType: body.mimeType,
+			domain: body.domain,
+			expires: body.expires,
+		});
+
 		if (
 			!body.uploadId ||
 			!body.slug ||
 			!body.filename ||
 			!body.filesize ||
 			!body.mimeType ||
-			!body.domain ||
 			!body.expires
 		) {
 			return NextResponse.json<ErrorResponse>(
@@ -29,32 +37,32 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Sanitizar filename
 		const sanitizedFilename = sanitizeFilename(body.filename);
 
-		// Chave final no R2
 		const finalKey = `${body.slug}/${sanitizedFilename}`;
 
-		// Juntar todos os chunks em um arquivo final
 		await mergeChunks(body.uploadId, finalKey, body.mimeType);
 
-		// Calcular data de expiração
 		const expiresAt = new Date(Date.now() + EXPIRES_MAP[body.expires]);
 
-		// Salvar no banco de dados
+		console.log("[Complete Upload] Calculated expiresAt:", {
+			expires: body.expires,
+			expirationMs: EXPIRES_MAP[body.expires],
+			expiresAt: expiresAt.toISOString(),
+		});
+
 		const upload = await prisma.upload.create({
 			data: {
 				slug: body.slug,
 				filename: sanitizedFilename,
 				filesize: body.filesize,
 				mimeType: body.mimeType,
-				domain: body.domain,
+				domain: body.domain || "",
 				expiresAt,
 			},
 		});
 
-		// Gerar URL pública
-		const url = getPublicUrl(body.slug, sanitizedFilename);
+		const url = getPublicUrl(body.slug, sanitizedFilename, body.domain || undefined);
 
 		const response: UploadResponse = {
 			id: upload.id,

@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
 	try {
 		const body = (await req.json()) as StartUploadRequest;
 
-		// Validações
 		if (!body.filename || !body.filesize || !body.mimeType) {
 			return NextResponse.json<ErrorResponse>(
 				{ error: "Missing required fields" },
@@ -27,7 +26,6 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Validar tamanho
 		if (!validateFileSize(body.filesize, MAX_FILE_SIZE)) {
 			return NextResponse.json<ErrorResponse>(
 				{
@@ -45,7 +43,6 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Validar MIME type
 		if (!isValidMimeType(body.mimeType)) {
 			return NextResponse.json<ErrorResponse>(
 				{ error: "Invalid file type", details: `Type ${body.mimeType} not allowed` },
@@ -53,10 +50,8 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Sanitizar filename
 		const sanitizedFilename = sanitizeFilename(body.filename);
 
-		// Gerar slug único (verificar se não existe)
 		let slug = generateSlug();
 		let attempts = 0;
 		while (attempts < 10) {
@@ -77,10 +72,8 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Gerar uploadId
 		const uploadId = generateUploadId();
 
-		// Determinar se é upload direto ou chunked
 		const isDirectUpload = body.filesize <= DIRECT_UPLOAD_LIMIT;
 		const totalChunks = isDirectUpload
 			? 1

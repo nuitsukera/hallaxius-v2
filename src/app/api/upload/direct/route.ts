@@ -21,8 +21,15 @@ export async function POST(req: NextRequest) {
 		const expires = searchParams.get("expires");
 		const filesizeStr = searchParams.get("filesize");
 
-		// Validações
-		if (!filename || !mimeType || !domain || !expires || !filesizeStr) {
+		console.log("[Direct Upload] Received params:", {
+			filename,
+			mimeType,
+			domain,
+			expires,
+			filesize: filesizeStr,
+		});
+
+		if (!filename || !mimeType || !expires || !filesizeStr) {
 			return NextResponse.json<ErrorResponse>(
 				{ error: "Missing required parameters" },
 				{ status: 400 },
@@ -38,7 +45,6 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Validar tamanho
 		if (filesize > DIRECT_UPLOAD_LIMIT) {
 			return NextResponse.json<ErrorResponse>(
 				{
@@ -63,7 +69,6 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Validar MIME type
 		if (!isValidMimeType(mimeType)) {
 			return NextResponse.json<ErrorResponse>(
 				{ error: "Invalid file type" },
@@ -71,7 +76,6 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Validar expires
 		if (!["1h", "1d", "7d", "30d"].includes(expires)) {
 			return NextResponse.json<ErrorResponse>(
 				{ error: "Invalid expiration option" },
@@ -79,10 +83,8 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Sanitizar filename
 		const sanitizedFilename = sanitizeFilename(filename);
 
-		// Gerar slug único
 		let slug = generateSlug();
 		let attempts = 0;
 		while (attempts < 10) {
@@ -103,10 +105,8 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Chave no R2
 		const key = `${slug}/${sanitizedFilename}`;
 
-		// Obter o corpo da requisição como ArrayBuffer
 		const arrayBuffer = await req.arrayBuffer();
 		const buffer = Buffer.from(arrayBuffer);
 
@@ -120,28 +120,30 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// Fazer upload direto para o R2
 		await uploadToR2(key, buffer, mimeType);
 
-		// Calcular data de expiração
 		const expiresAt = new Date(
 			Date.now() + EXPIRES_MAP[expires as keyof typeof EXPIRES_MAP],
 		);
 
-		// Salvar no banco de dados
+		console.log("[Direct Upload] Calculated expiresAt:", {
+			expires,
+			expirationMs: EXPIRES_MAP[expires as keyof typeof EXPIRES_MAP],
+			expiresAt: expiresAt.toISOString(),
+		});
+
 		const upload = await prisma.upload.create({
 			data: {
 				slug,
 				filename: sanitizedFilename,
 				filesize,
 				mimeType,
-				domain,
+				domain: domain || "",
 				expiresAt,
 			},
 		});
 
-		// Gerar URL pública
-		const url = getPublicUrl(slug, sanitizedFilename);
+		const url = getPublicUrl(slug, sanitizedFilename, domain || undefined);
 
 		const response: UploadResponse = {
 			id: upload.id,
