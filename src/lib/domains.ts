@@ -4,11 +4,11 @@ const DOMAINS_CACHE_KEY = "domains";
 
 export function getCachedDomains(): DomainOption[] | null {
 	if (typeof window === "undefined") return null;
-	
+
 	try {
 		const cached = localStorage.getItem(DOMAINS_CACHE_KEY);
 		if (!cached) return null;
-		
+
 		return JSON.parse(cached) as DomainOption[];
 	} catch (error) {
 		console.error("Error reading domains from cache:", error);
@@ -18,7 +18,7 @@ export function getCachedDomains(): DomainOption[] | null {
 
 export function setCachedDomains(domains: DomainOption[]): void {
 	if (typeof window === "undefined") return;
-	
+
 	try {
 		localStorage.setItem(DOMAINS_CACHE_KEY, JSON.stringify(domains));
 	} catch (error) {
@@ -28,7 +28,7 @@ export function setCachedDomains(domains: DomainOption[]): void {
 
 export function clearCachedDomains(): void {
 	if (typeof window === "undefined") return;
-	
+
 	try {
 		localStorage.removeItem(DOMAINS_CACHE_KEY);
 	} catch (error) {
@@ -38,11 +38,11 @@ export function clearCachedDomains(): void {
 
 export async function fetchDomains(): Promise<DomainOption[]> {
 	const response = await fetch("/api/domains");
-	
+
 	if (!response.ok) {
 		throw new Error("Failed to fetch domains");
 	}
-	
+
 	return await response.json();
 }
 
@@ -51,7 +51,7 @@ export async function getDomains(): Promise<DomainOption[]> {
 	if (cached) {
 		return cached;
 	}
-	
+
 	const domains = await fetchDomains();
 	setCachedDomains(domains);
 	return domains;

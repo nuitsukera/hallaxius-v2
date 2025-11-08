@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mergeChunks, getPublicUrl } from "@/lib/r2";
+import {
+	getPublicUrl,
+	getR2Bucket,
+	getMultipartUploadState,
+	resumeMultipartUpload,
+	completeMultipartUpload,
+	deleteMultipartUploadState,
+} from "@/lib/r2";
 import { prisma } from "@/lib/prisma";
 import { sanitizeFilename } from "@/lib/validation";
 import type {
@@ -11,17 +18,9 @@ import { EXPIRES_MAP } from "@/types/uploads";
 
 export async function POST(req: NextRequest) {
 	try {
-		const body = (await req.json()) as CompleteUploadRequest;
+		const bucket = getR2Bucket();
 
-		console.log("[Complete Upload] Received body:", {
-			uploadId: body.uploadId,
-			slug: body.slug,
-			filename: body.filename,
-			filesize: body.filesize,
-			mimeType: body.mimeType,
-			domain: body.domain,
-			expires: body.expires,
-		});
+		const body = (await req.json()) as CompleteUploadRequest;
 
 		if (
 			!body.uploadId ||
@@ -41,15 +40,51 @@ export async function POST(req: NextRequest) {
 
 		const finalKey = `${body.slug}/${sanitizedFilename}`;
 
-		await mergeChunks(body.uploadId, finalKey, body.mimeType);
+		const state = await getMultipartUploadState(bucket, body.uploadId);
+		if (!state) {
+			return NextResponse.json<ErrorResponse>(
+				{ error: "Upload not found" },
+				{ status: 404 },
+			);
+		}
+
+		if (!body.uploadedParts || body.uploadedParts.length !== body.totalChunks) {
+			return NextResponse.json<ErrorResponse>(
+				{
+					error: "Missing chunks",
+					details: `Expected ${body.totalChunks} chunks, got ${body.uploadedParts?.length || 0}`,
+				},
+				{ status: 400 },
+			);
+		}
+
+		const sortedParts = body.uploadedParts.sort(
+			(a, b) => a.partNumber - b.partNumber,
+		);
+
+		for (let i = 0; i < sortedParts.length; i++) {
+			if (sortedParts[i].partNumber !== i + 1) {
+				return NextResponse.json<ErrorResponse>(
+					{
+						error: "Invalid part numbers",
+						details: `Expected part ${i + 1}, got ${sortedParts[i].partNumber}`,
+					},
+					{ status: 400 },
+				);
+			}
+		}
+
+		const multipartUpload = await resumeMultipartUpload(
+			bucket,
+			state.key,
+			state.multipartUploadId,
+		);
+
+		await completeMultipartUpload(multipartUpload, sortedParts as any);
+
+		await deleteMultipartUploadState(bucket, body.uploadId);
 
 		const expiresAt = new Date(Date.now() + EXPIRES_MAP[body.expires]);
-
-		console.log("[Complete Upload] Calculated expiresAt:", {
-			expires: body.expires,
-			expirationMs: EXPIRES_MAP[body.expires],
-			expiresAt: expiresAt.toISOString(),
-		});
 
 		const upload = await prisma.upload.create({
 			data: {
@@ -62,7 +97,11 @@ export async function POST(req: NextRequest) {
 			},
 		});
 
-		const url = getPublicUrl(body.slug, sanitizedFilename, body.domain || undefined);
+		const url = getPublicUrl(
+			body.slug,
+			sanitizedFilename,
+			body.domain || undefined,
+		);
 
 		const response: UploadResponse = {
 			id: upload.id,
@@ -74,6 +113,32 @@ export async function POST(req: NextRequest) {
 		return NextResponse.json(response);
 	} catch (error) {
 		console.error("Error completing upload:", error);
+
+		try {
+			const body = (await req.clone().json()) as CompleteUploadRequest;
+			if (body.uploadId) {
+				const bucket = getR2Bucket();
+				const state = await getMultipartUploadState(bucket, body.uploadId);
+
+				if (state) {
+					try {
+						const multipartUpload = await resumeMultipartUpload(
+							bucket,
+							state.key,
+							state.multipartUploadId,
+						);
+						await multipartUpload.abort();
+					} catch (abortError) {
+						console.error("Error aborting multipart upload:", abortError);
+					}
+
+					await deleteMultipartUploadState(bucket, body.uploadId);
+				}
+			}
+		} catch (cleanupError) {
+			console.error("Error during cleanup:", cleanupError);
+		}
+
 		return NextResponse.json<ErrorResponse>(
 			{
 				error: "Failed to complete upload",

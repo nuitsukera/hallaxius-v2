@@ -1,149 +1,112 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-let r2Client: S3Client | null = null;
+export function getR2Bucket(): R2Bucket {
+	const context = getCloudflareContext();
+	const bucket = context.env.UPLOADS_R2_BUCKET;
 
-function getR2Client(): S3Client {
-	if (!r2Client) {
-		const accountId = process.env.R2_ACCOUNT_ID;
-		const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-		const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-
-		if (!accountId || !accessKeyId || !secretAccessKey) {
-			throw new Error("R2 credentials not configured");
-		}
-
-		r2Client = new S3Client({
-			region: "auto",
-			endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-			credentials: {
-				accessKeyId,
-				secretAccessKey,
-			},
-		});
+	if (!bucket) {
+		throw new Error("R2 bucket binding not available");
 	}
 
-	return r2Client;
+	return bucket;
 }
 
-const BUCKET_NAME = process.env.R2_BUCKET_NAME;
-
 export async function uploadToR2(
+	bucket: R2Bucket,
 	key: string,
 	body: Buffer | Uint8Array | ReadableStream,
 	contentType: string,
 ): Promise<void> {
-	const client = getR2Client();
-
-	await client.send(
-		new PutObjectCommand({
-			Bucket: BUCKET_NAME,
-			Key: key,
-			Body: body,
-			ContentType: contentType,
-		}),
-	);
+	await bucket.put(key, body, {
+		httpMetadata: {
+			contentType,
+		},
+	});
 }
 
-export async function uploadChunk(
-	uploadId: string,
-	chunkIndex: number,
-	body: Buffer | Uint8Array,
-): Promise<void> {
-	const key = `temp/${uploadId}/chunk-${chunkIndex}`;
-	await uploadToR2(key, body, "application/octet-stream");
-}
-
-export async function listChunks(uploadId: string): Promise<string[]> {
-	const client = getR2Client();
-	const prefix = `temp/${uploadId}/`;
-
-	const response = await client.send(
-		new ListObjectsV2Command({
-			Bucket: BUCKET_NAME,
-			Prefix: prefix,
-		}),
-	);
-
-	return (response.Contents || [])
-		.map((item) => item.Key)
-		.filter((key): key is string => key !== undefined)
-		.sort();
-}
-
-export async function getChunk(key: string): Promise<Buffer> {
-	const client = getR2Client();
-
-	const response = await client.send(
-		new GetObjectCommand({
-			Bucket: BUCKET_NAME,
-			Key: key,
-		}),
-	);
-
-	if (!response.Body) {
-		throw new Error("Chunk not found");
-	}
-
-	const chunks: Uint8Array[] = [];
-	for await (const chunk of response.Body as any) {
-		chunks.push(chunk);
-	}
-
-	return Buffer.concat(chunks);
-}
-
-export async function mergeChunks(
-	uploadId: string,
-	finalKey: string,
+export async function createMultipartUpload(
+	bucket: R2Bucket,
+	key: string,
 	contentType: string,
+): Promise<R2MultipartUpload> {
+	return await bucket.createMultipartUpload(key, {
+		httpMetadata: {
+			contentType,
+		},
+	});
+}
+
+export async function uploadPart(
+	multipartUpload: R2MultipartUpload,
+	partNumber: number,
+	body: ArrayBuffer | ArrayBufferView | ReadableStream,
+): Promise<R2UploadedPart> {
+	return await multipartUpload.uploadPart(partNumber, body);
+}
+
+export async function completeMultipartUpload(
+	multipartUpload: R2MultipartUpload,
+	uploadedParts: R2UploadedPart[],
+): Promise<R2Object> {
+	return await multipartUpload.complete(uploadedParts);
+}
+
+export async function abortMultipartUpload(
+	multipartUpload: R2MultipartUpload,
 ): Promise<void> {
-	const chunkKeys = await listChunks(uploadId);
-
-	if (chunkKeys.length === 0) {
-		throw new Error("No chunks found");
-	}
-
-	const buffers: Buffer[] = [];
-	for (const key of chunkKeys) {
-		const buffer = await getChunk(key);
-		buffers.push(buffer);
-	}
-
-	const finalBuffer = Buffer.concat(buffers);
-
-	await uploadToR2(finalKey, finalBuffer, contentType);
-
-	await deleteChunks(uploadId);
+	await multipartUpload.abort();
 }
 
-export async function deleteChunks(uploadId: string): Promise<void> {
-	const client = getR2Client();
-	const chunkKeys = await listChunks(uploadId);
-
-	for (const key of chunkKeys) {
-		await client.send(
-			new DeleteObjectCommand({
-				Bucket: BUCKET_NAME,
-				Key: key,
-			}),
-		);
-	}
+export async function saveMultipartUploadState(
+	bucket: R2Bucket,
+	uploadId: string,
+	multipartUploadId: string,
+	key: string,
+): Promise<void> {
+	const stateKey = `multipart-state/${uploadId}`;
+	const state = JSON.stringify({ multipartUploadId, key });
+	await bucket.put(stateKey, state);
 }
 
-export async function deleteFromR2(key: string): Promise<void> {
-	const client = getR2Client();
-
-	await client.send(
-		new DeleteObjectCommand({
-			Bucket: BUCKET_NAME,
-			Key: key,
-		}),
-	);
+export async function getMultipartUploadState(
+	bucket: R2Bucket,
+	uploadId: string,
+): Promise<{ multipartUploadId: string; key: string } | null> {
+	const stateKey = `multipart-state/${uploadId}`;
+	const object = await bucket.get(stateKey);
+	if (!object) return null;
+	const text = await object.text();
+	return JSON.parse(text);
 }
 
-export function getPublicUrl(slug: string, filename: string, domain?: string): string {
-	const baseUrl = domain 
-		? `https://${domain}` 
-		: process.env.R2_PUBLIC_BASE_URL;
+export async function resumeMultipartUpload(
+	bucket: R2Bucket,
+	key: string,
+	multipartUploadId: string,
+): Promise<R2MultipartUpload> {
+	return bucket.resumeMultipartUpload(key, multipartUploadId);
+}
+
+export async function deleteMultipartUploadState(
+	bucket: R2Bucket,
+	uploadId: string,
+): Promise<void> {
+	const stateKey = `multipart-state/${uploadId}`;
+	await bucket.delete(stateKey);
+}
+
+export async function deleteFromR2(
+	bucket: R2Bucket,
+	key: string,
+): Promise<void> {
+	await bucket.delete(key);
+}
+
+export function getPublicUrl(
+	slug: string,
+	filename: string,
+	domain?: string,
+): string {
+	const baseUrl = domain ? `https://${domain}` : process.env.R2_PUBLIC_BASE_URL;
 	return `${baseUrl}/${slug}`;
 }

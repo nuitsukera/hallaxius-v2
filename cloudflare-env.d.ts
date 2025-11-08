@@ -8,6 +8,7 @@ declare namespace Cloudflare {
 		CRON_SECRET?: string;
 		ASSETS: Fetcher;
 		NEXT_INC_CACHE_R2_BUCKET: R2Bucket;
+		UPLOADS_R2_BUCKET: R2Bucket;
 	}
 }
 interface CloudflareEnv extends Cloudflare.Env {}

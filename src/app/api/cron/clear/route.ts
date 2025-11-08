@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { deleteFromR2 } from "@/lib/r2";
+import { deleteFromR2, getR2Bucket } from "@/lib/r2";
 
 export async function GET(req: NextRequest) {
 	try {
+		const bucket = getR2Bucket();
+
 		const authHeader = req.headers.get("authorization");
 		const cronSecret = process.env.CRON_SECRET;
 
@@ -17,10 +19,7 @@ export async function GET(req: NextRequest) {
 
 		if (authHeader !== `Bearer ${cronSecret}`) {
 			console.error("Invalid CRON_SECRET");
-			return NextResponse.json(
-				{ error: "Unauthorized" },
-				{ status: 401 },
-			);
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 		}
 
 		const expiredUploads = await prisma.upload.findMany({
@@ -48,30 +47,34 @@ export async function GET(req: NextRequest) {
 		console.log(`Found ${expiredUploads.length} expired files`);
 
 		const results = await Promise.allSettled(
-			expiredUploads.map(async (upload) => {
-				try {
-					const key = `${upload.slug}/${upload.filename}`;
-					await deleteFromR2(key);
+			expiredUploads.map(
+				async (upload: { id: string; slug: string; filename: string }) => {
+					try {
+						const key = `${upload.slug}/${upload.filename}`;
+						await deleteFromR2(bucket, key);
 
-					await prisma.upload.delete({
-						where: { id: upload.id },
-					});
+						await prisma.upload.delete({
+							where: { id: upload.id },
+						});
 
-					console.log(`File ${key} deleted successfully`);
-					return { success: true, key };
-				} catch (error) {
-					console.error(`Error deleting ${upload.slug}:`, error);
-					return { success: false, key: upload.slug, error };
-				}
-			}),
+						console.log(`File ${key} deleted successfully`);
+						return { success: true, key };
+					} catch (error) {
+						console.error(`Error deleting ${upload.slug}:`, error);
+						return { success: false, key: upload.slug, error };
+					}
+				},
+			),
 		);
 
-		const succeeded = results.filter((r) => r.status === "fulfilled").length;
-		const failed = results.filter((r) => r.status === "rejected").length;
+		const succeeded = results.filter(
+			(r: PromiseSettledResult<unknown>) => r.status === "fulfilled",
+		).length;
+		const failed = results.filter(
+			(r: PromiseSettledResult<unknown>) => r.status === "rejected",
+		).length;
 
-		console.log(
-			`Cleanup completed: ${succeeded} succeeded, ${failed} failed`,
-		);
+		console.log(`Cleanup completed: ${succeeded} succeeded, ${failed} failed`);
 
 		return NextResponse.json({
 			success: true,

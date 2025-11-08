@@ -14,6 +14,11 @@ import type {
 } from "@/types/uploads";
 import { CHUNK_SIZE, DIRECT_UPLOAD_LIMIT } from "@/types/uploads";
 import { prisma } from "@/lib/prisma";
+import {
+	getR2Bucket,
+	createMultipartUpload,
+	saveMultipartUploadState,
+} from "@/lib/r2";
 
 export async function POST(req: NextRequest) {
 	try {
@@ -45,7 +50,10 @@ export async function POST(req: NextRequest) {
 
 		if (!isValidMimeType(body.mimeType)) {
 			return NextResponse.json<ErrorResponse>(
-				{ error: "Invalid file type", details: `Type ${body.mimeType} not allowed` },
+				{
+					error: "Invalid file type",
+					details: `Type ${body.mimeType} not allowed`,
+				},
 				{ status: 400 },
 			);
 		}
@@ -79,6 +87,22 @@ export async function POST(req: NextRequest) {
 			? 1
 			: Math.ceil(body.filesize / CHUNK_SIZE);
 
+		if (!isDirectUpload) {
+			const bucket = getR2Bucket();
+			const finalKey = `${slug}/${sanitizedFilename}`;
+			const multipartUpload = await createMultipartUpload(
+				bucket,
+				finalKey,
+				body.mimeType,
+			);
+			await saveMultipartUploadState(
+				bucket,
+				uploadId,
+				multipartUpload.uploadId,
+				finalKey,
+			);
+		}
+
 		const response: StartUploadResponse = {
 			uploadId,
 			slug,
@@ -91,7 +115,10 @@ export async function POST(req: NextRequest) {
 	} catch (error) {
 		console.error("Error starting upload:", error);
 		return NextResponse.json<ErrorResponse>(
-			{ error: "Internal server error" },
+			{
+				error: "Internal server error",
+				details: error instanceof Error ? error.message : "Unknown error",
+			},
 			{ status: 500 },
 		);
 	}

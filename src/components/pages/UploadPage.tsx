@@ -98,7 +98,7 @@ export default function UploadPage() {
 			});
 
 			if (!response.ok) {
-				const error = await response.json() as { error?: string };
+				const error = (await response.json()) as { error?: string };
 				throw new Error(error.error || "Upload failed");
 			}
 
@@ -106,7 +106,7 @@ export default function UploadPage() {
 			setUploadUrl(result.url);
 			setSelectedFile(null);
 			toast.success("Upload complete!", {
-				description: `File uploaded successfully to ${result.url}`,
+				description: `File uploaded successfully`,
 			});
 		} catch (error) {
 			console.error("Direct upload error:", error);
@@ -141,27 +141,35 @@ export default function UploadPage() {
 			});
 
 			if (!startResponse.ok) {
-				const error = await startResponse.json() as { error?: string };
+				const error = (await startResponse.json()) as { error?: string };
 				throw new Error(error.error || "Failed to start upload");
 			}
 
 			const startData: StartUploadResponse = await startResponse.json();
 			const { uploadId, slug, totalChunks } = startData;
 
+			const uploadedParts: Array<{ partNumber: number; etag: string }> = [];
 			let uploadedChunks = 0;
-			for (let i = 0; i < totalChunks; i++) {
-				const start = i * CHUNK_SIZE;
+
+			const maxConcurrentUploads = 3; // EM CASOS DE ERROS MUDAR PARA 2
+
+			const uploadChunk = async (chunkIndex: number): Promise<void> => {
+				const start = chunkIndex * CHUNK_SIZE;
 				const end = Math.min(start + CHUNK_SIZE, file.size);
 				const chunk = file.slice(start, end);
 
 				let retryCount = 0;
 				const maxRetries = 3;
 
+				console.log(
+					`[Chunk ${chunkIndex + 1}/${totalChunks}] Starting upload (${formatBytes(chunk.size)})`,
+				);
+
 				while (retryCount < maxRetries) {
 					try {
 						const chunkParams = new URLSearchParams({
 							uploadId,
-							chunkIndex: i.toString(),
+							chunkIndex: chunkIndex.toString(),
 							totalChunks: totalChunks.toString(),
 						});
 
@@ -174,21 +182,63 @@ export default function UploadPage() {
 						);
 
 						if (!chunkResponse.ok) {
-							throw new Error(`Failed to upload chunk ${i}`);
+							throw new Error(`Failed to upload chunk ${chunkIndex}`);
+						}
+
+						const chunkData = (await chunkResponse.json()) as {
+							uploadedPart?: { partNumber: number; etag: string };
+						};
+						if (chunkData.uploadedPart) {
+							uploadedParts.push(chunkData.uploadedPart);
 						}
 
 						uploadedChunks++;
 						setUploadProgress(Math.round((uploadedChunks / totalChunks) * 100));
-						break;
+						console.log(`[Chunk ${chunkIndex + 1}/${totalChunks}] ✅ Success`);
+						return;
 					} catch (error) {
 						retryCount++;
+						console.error(
+							`[Chunk ${chunkIndex + 1}/${totalChunks}] ❌ Attempt ${retryCount}/${maxRetries} failed:`,
+							error,
+						);
 						if (retryCount >= maxRetries) {
-							throw new Error(`Failed to upload chunk ${i} after ${maxRetries} attempts`);
+							throw new Error(
+								`Failed to upload chunk ${chunkIndex} after ${maxRetries} attempts: ${error instanceof Error ? error.message : "Unknown error"}`,
+							);
 						}
-						await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));
+						await new Promise((resolve) =>
+							setTimeout(resolve, 2000 * Math.pow(2, retryCount - 1)),
+						);
 					}
 				}
+			};
+
+			console.log(
+				`[Upload] Starting batched upload: ${totalChunks} chunks, ${maxConcurrentUploads} concurrent`,
+			);
+			for (let i = 0; i < totalChunks; i += maxConcurrentUploads) {
+				const batchPromises: Promise<void>[] = [];
+				const batchSize = Math.min(i + maxConcurrentUploads, totalChunks) - i;
+
+				console.log(
+					`[Batch ${Math.floor(i / maxConcurrentUploads) + 1}] Processing chunks ${i + 1}-${i + batchSize}`,
+				);
+
+				for (
+					let j = i;
+					j < Math.min(i + maxConcurrentUploads, totalChunks);
+					j++
+				) {
+					batchPromises.push(uploadChunk(j));
+				}
+
+				await Promise.all(batchPromises);
+				console.log(
+					`[Batch ${Math.floor(i / maxConcurrentUploads) + 1}] ✅ Completed`,
+				);
 			}
+			console.log(`[Upload] All chunks uploaded successfully`);
 
 			console.log("[Frontend] Chunked upload complete params:", {
 				uploadId,
@@ -199,6 +249,7 @@ export default function UploadPage() {
 				domain: selectedDomain,
 				expires: selectedExpires,
 				totalChunks,
+				uploadedPartsCount: uploadedParts.length,
 			});
 
 			const completeResponse = await fetch("/api/upload/complete", {
@@ -213,11 +264,12 @@ export default function UploadPage() {
 					domain: selectedDomain,
 					expires: selectedExpires,
 					totalChunks,
+					uploadedParts,
 				}),
 			});
 
 			if (!completeResponse.ok) {
-				const error = await completeResponse.json() as { error?: string };
+				const error = (await completeResponse.json()) as { error?: string };
 				throw new Error(error.error || "Failed to complete upload");
 			}
 
@@ -225,7 +277,7 @@ export default function UploadPage() {
 			setUploadUrl(result.url);
 			setSelectedFile(null);
 			toast.success("Upload complete!", {
-				description: `File uploaded successfully to ${result.url}`,
+				description: `File uploaded successfully`,
 			});
 		} catch (error) {
 			console.error("Chunked upload error:", error);
@@ -260,7 +312,9 @@ export default function UploadPage() {
 		}
 	};
 
-	const handleFileInput = async (event: React.ChangeEvent<HTMLInputElement>) => {
+	const handleFileInput = async (
+		event: React.ChangeEvent<HTMLInputElement>,
+	) => {
 		const files = event.target.files;
 		if (files && files.length > 0) {
 			const file = files[0];
@@ -303,19 +357,19 @@ export default function UploadPage() {
 
 	const handleRefreshDomains = async () => {
 		if (isRefreshingDomains) return;
-		
+
 		setIsRefreshingDomains(true);
 		setRefreshSuccess(false);
-		
+
 		try {
 			const data = await refreshDomains();
 			setDomains(data);
-			const selectedStillExists = data.some(d => d.value === selectedDomain);
+			const selectedStillExists = data.some((d) => d.value === selectedDomain);
 			if (!selectedStillExists && data.length > 0) {
 				setSelectedDomain(data[0].value);
 			}
 			toast.success("Domains refreshed!", {
-				description: `Found ${data.length} domain${data.length !== 1 ? 's' : ''}`,
+				description: `Found ${data.length} domain${data.length !== 1 ? "s" : ""}`,
 			});
 			setRefreshSuccess(true);
 			setTimeout(() => {
@@ -327,7 +381,8 @@ export default function UploadPage() {
 		} catch (error) {
 			console.error("Error refreshing domains:", error);
 			toast.error("Failed to refresh domains", {
-				description: error instanceof Error ? error.message : "Please try again later",
+				description:
+					error instanceof Error ? error.message : "Please try again later",
 			});
 			setTimeout(() => {
 				setIsRefreshingDomains(false);
@@ -352,7 +407,9 @@ export default function UploadPage() {
 					</div>
 					<Tabs
 						value={selectedExpires}
-						onValueChange={(value) => setSelectedExpires(value as ExpiresOption)}
+						onValueChange={(value) =>
+							setSelectedExpires(value as ExpiresOption)
+						}
 						className="w-full max-w-[400px]"
 					>
 						<TabsList className="w-full">
@@ -365,10 +422,7 @@ export default function UploadPage() {
 							<TabsTrigger value="7d" className="flex-1">
 								7d
 							</TabsTrigger>
-							<TabsTrigger
-								value="30d"
-								className="flex-1"
-							>
+							<TabsTrigger value="30d" className="flex-1">
 								30d
 							</TabsTrigger>
 						</TabsList>
@@ -387,14 +441,14 @@ export default function UploadPage() {
 							disabled={isLoadingDomains || domains.length === 0}
 						>
 							<SelectTrigger className="w-full sm:w-48 md:w-64">
-								<SelectValue 
+								<SelectValue
 									placeholder={
-										isLoadingDomains 
-											? "Loading domains..." 
-											: domains.length === 0 
-												? "No domains available" 
+										isLoadingDomains
+											? "Loading domains..."
+											: domains.length === 0
+												? "No domains available"
 												: "Select domain"
-									} 
+									}
 								/>
 							</SelectTrigger>
 							<SelectContent>
@@ -418,16 +472,16 @@ export default function UploadPage() {
 							variant="outline"
 							className="shrink-0 relative cursor-pointer"
 						>
-							<RefreshCw 
+							<RefreshCw
 								className={`h-4 w-4 absolute transition-all duration-300 ${
 									refreshSuccess
 										? "opacity-0 scale-0 rotate-90"
-										: isRefreshingDomains 
-											? "animate-spin opacity-100 scale-100" 
+										: isRefreshingDomains
+											? "animate-spin opacity-100 scale-100"
 											: "opacity-100 scale-100 rotate-0"
-								}`} 
+								}`}
 							/>
-							<Check 
+							<Check
 								className={`h-4 w-4 absolute transition-all duration-300 ${
 									refreshSuccess
 										? "opacity-100 scale-100 rotate-0"
@@ -504,9 +558,7 @@ export default function UploadPage() {
 				<div className="mt-6">
 					<div className="relative">
 						<div className="flex justify-end mb-1">
-							<p className="text-sm text-muted-foreground">
-								{uploadProgress}%
-							</p>
+							<p className="text-sm text-muted-foreground">{uploadProgress}%</p>
 						</div>
 						<Progress value={uploadProgress} className="h-2" />
 					</div>

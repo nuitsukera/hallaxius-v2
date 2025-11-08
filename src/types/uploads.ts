@@ -7,7 +7,7 @@ export const EXPIRES_MAP: Record<ExpiresOption, number> = {
 	"30d": 30 * 24 * 60 * 60 * 1000,
 };
 
-export const CHUNK_SIZE = 15 * 1024 * 1024;
+export const CHUNK_SIZE = 20 * 1024 * 1024;
 export const DIRECT_UPLOAD_LIMIT = 10 * 1024 * 1024;
 
 export interface StartUploadRequest {
@@ -32,11 +32,17 @@ export interface ChunkUploadRequest {
 	totalChunks: number;
 }
 
+export interface UploadedPartInfo {
+	partNumber: number;
+	etag: string;
+}
+
 export interface ChunkUploadResponse {
 	success: boolean;
 	chunkIndex: number;
 	uploaded: number;
 	total: number;
+	uploadedPart: UploadedPartInfo;
 }
 
 export interface CompleteUploadRequest {
@@ -48,6 +54,7 @@ export interface CompleteUploadRequest {
 	domain?: string;
 	expires: ExpiresOption;
 	totalChunks: number;
+	uploadedParts: UploadedPartInfo[];
 }
 
 export interface UploadResponse {

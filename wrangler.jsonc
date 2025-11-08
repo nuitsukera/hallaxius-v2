@@ -1,7 +1,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "hallaxius-v2",
-	"main": ".open-next/worker.js",
+	"main": "worker.ts",
 	"compatibility_date": "2025-03-01",
 	"compatibility_flags": ["nodejs_compat_v2", "global_fetch_strictly_public"],
 	"assets": {
@@ -17,6 +17,10 @@
 	"r2_buckets": [
 		{
 			"binding": "NEXT_INC_CACHE_R2_BUCKET",
+			"bucket_name": "hallaxius"
+		},
+		{
+			"binding": "UPLOADS_R2_BUCKET",
 			"bucket_name": "hallaxius"
 		}
 	],

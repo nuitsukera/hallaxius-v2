@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { uploadToR2, getPublicUrl } from "@/lib/r2";
+import { uploadToR2, getPublicUrl, getR2Bucket } from "@/lib/r2";
 import { prisma } from "@/lib/prisma";
 import {
 	isValidMimeType,
@@ -14,20 +14,14 @@ import { EXPIRES_MAP, DIRECT_UPLOAD_LIMIT } from "@/types/uploads";
 
 export async function POST(req: NextRequest) {
 	try {
+		const bucket = getR2Bucket();
+
 		const searchParams = req.nextUrl.searchParams;
 		const filename = searchParams.get("filename");
 		const mimeType = searchParams.get("mimeType");
 		const domain = searchParams.get("domain");
 		const expires = searchParams.get("expires");
 		const filesizeStr = searchParams.get("filesize");
-
-		console.log("[Direct Upload] Received params:", {
-			filename,
-			mimeType,
-			domain,
-			expires,
-			filesize: filesizeStr,
-		});
 
 		if (!filename || !mimeType || !expires || !filesizeStr) {
 			return NextResponse.json<ErrorResponse>(
@@ -120,17 +114,11 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		await uploadToR2(key, buffer, mimeType);
+		await uploadToR2(bucket, key, buffer, mimeType);
 
 		const expiresAt = new Date(
 			Date.now() + EXPIRES_MAP[expires as keyof typeof EXPIRES_MAP],
 		);
-
-		console.log("[Direct Upload] Calculated expiresAt:", {
-			expires,
-			expirationMs: EXPIRES_MAP[expires as keyof typeof EXPIRES_MAP],
-			expiresAt: expiresAt.toISOString(),
-		});
 
 		const upload = await prisma.upload.create({
 			data: {
