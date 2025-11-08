@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
 	title: "Hallaxius",
-	description:
-		"Temporarily upload files up to 512 MB for free with AES-256 encryption and complete anonymity.",
 	alternates: {
 		canonical: "https://hallaxi.us",
 	},
@@ -12,8 +10,6 @@ export const metadata: Metadata = {
 	},
 	openGraph: {
 		title: "Hallaxius",
-		description:
-			"Temporarily upload files up to 512 MB for free with AES-256 encryption and complete anonymity.",
 		url: "https://hallaxi.us",
 		type: "website",
 		images: [
@@ -28,8 +24,6 @@ export const metadata: Metadata = {
 	twitter: {
 		card: "summary",
 		title: "Hallaxius",
-		description:
-			"Temporarily upload files up to 512 MB for free with AES-256 encryption and complete anonymity.",
 		images: ["https://hallaxi.us/favicon.png"],
 	},
 };

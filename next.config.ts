@@ -7,7 +7,13 @@ const nextConfig: NextConfig = {
 	},
 	allowedDevOrigins: ["basket-brother-fishing-rss.trycloudflare.com"],
 	images: {
-		domains: ["r2.hallaxi.us"],
+		remotePatterns: [
+			{
+				protocol: "https",
+				hostname: "r2.hallaxi.us",
+				pathname: "/**",
+			},
+		],
 	},
 	experimental: {
 		serverActions: {

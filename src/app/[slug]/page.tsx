@@ -28,9 +28,7 @@ export async function generateMetadata({
 	}
 
 	const r2Url = `${process.env.R2_PUBLIC_BASE_URL}/${slug}/${encodeURIComponent(record.filename)}`;
-	const isImage = record.mimeType.startsWith("image/");
 	const isVideo = record.mimeType.startsWith("video/");
-	const isAudio = record.mimeType.startsWith("audio/");
 
 	const metadata: Metadata = {
 		title: record.filename,
@@ -40,14 +38,20 @@ export async function generateMetadata({
 			siteName: "Hallaxius",
 		},
 		twitter: {
-			card: isImage || isVideo ? "summary_large_image" : "summary",
+			card: isVideo ? "summary_large_image" : "summary",
 			title: record.filename,
 		},
 	};
 
-	if (isImage) {
+	if (isVideo) {
 		metadata.openGraph = {
 			...metadata.openGraph,
+			videos: [
+				{
+					url: r2Url,
+					type: record.mimeType,
+				},
+			],
 			images: [
 				{
 					url: r2Url,
@@ -63,48 +67,6 @@ export async function generateMetadata({
 				{
 					url: r2Url,
 					alt: record.filename,
-				},
-			],
-		};
-	}
-
-	if (isVideo) {
-		metadata.openGraph = {
-			...metadata.openGraph,
-			videos: [
-				{
-					url: r2Url,
-					type: record.mimeType,
-				},
-			],
-			images: [
-				{
-					url: r2Url,
-					alt: record.filename,
-				},
-			],
-		};
-		metadata.twitter = {
-			...metadata.twitter,
-			card: "player",
-			players: [
-				{
-					playerUrl: r2Url,
-					streamUrl: r2Url,
-					width: 1280,
-					height: 720,
-				},
-			],
-		};
-	}
-
-	if (isAudio) {
-		metadata.openGraph = {
-			...metadata.openGraph,
-			audio: [
-				{
-					url: r2Url,
-					type: record.mimeType,
 				},
 			],
 		};
