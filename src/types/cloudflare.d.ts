@@ -2,7 +2,9 @@ export {};
 
 declare global {
 	interface CloudflareEnv {
-		R2_CACHE: R2Bucket;
+		NEXT_INC_CACHE_R2_BUCKET: R2Bucket;
+		R2_PUBLIC_BASE_URL: string;
+		CRON_SECRET?: string;
 	}
 
 	interface CloudflareVars {

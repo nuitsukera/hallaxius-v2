@@ -4,7 +4,10 @@
 declare namespace Cloudflare {
 	interface Env {
 		NEXTJS_ENV: string;
+		R2_PUBLIC_BASE_URL: string;
+		CRON_SECRET?: string;
 		ASSETS: Fetcher;
+		NEXT_INC_CACHE_R2_BUCKET: R2Bucket;
 	}
 }
 interface CloudflareEnv extends Cloudflare.Env {}

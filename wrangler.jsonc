@@ -3,7 +3,7 @@
 	"name": "hallaxius-v2",
 	"main": ".open-next/worker.js",
 	"compatibility_date": "2025-03-01",
-	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"compatibility_flags": ["nodejs_compat_v2", "global_fetch_strictly_public"],
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".open-next/assets"
@@ -18,6 +18,7 @@
 		}
 	],
 	"vars": {
-		"R2_PUBLIC_BASE_URL": "https://r2.hallaxi.us"
+		"R2_PUBLIC_BASE_URL": "https://r2.hallaxi.us",
+		"NEXTJS_ENV": "production"
 	}
 }
