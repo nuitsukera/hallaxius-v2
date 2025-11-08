@@ -7,7 +7,7 @@ export const EXPIRES_MAP: Record<ExpiresOption, number> = {
 	"30d": 30 * 24 * 60 * 60 * 1000,
 };
 
-export const CHUNK_SIZE = 20 * 1024 * 1024;
+export const CHUNK_SIZE = 15 * 1024 * 1024;
 export const DIRECT_UPLOAD_LIMIT = 10 * 1024 * 1024;
 
 export interface StartUploadRequest {
