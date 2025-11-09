@@ -36,10 +36,11 @@ function generateFileMetadata({
 
 	if (fileType === "VIDEO") {
 		return {
+		       title: filename,
 		       openGraph: {
+			       title: filename,
 			       type: "video.other",
 			       url: fileUrl,
-			       siteName: filename,
 			       videos: [
 				       {
 					       url: fileUrl,
@@ -53,7 +54,6 @@ function generateFileMetadata({
 					       url: fileUrl,
 					       width: dimensions.width,
 					       height: dimensions.height,
-					       alt: `${filename} thumbnail`,
 				       },
 			       ],
 		       },
@@ -66,16 +66,16 @@ function generateFileMetadata({
 
 	if (fileType === "IMAGE") {
 	       return {
+		       title: filename,
 		       openGraph: {
+			       title: filename,
 			       type: "website",
 			       url: fileUrl,
-			       siteName: filename,
 			       images: [
 				       {
 					       url: fileUrl,
 					       width: dimensions.width,
 					       height: dimensions.height,
-					       alt: filename,
 				       },
 			       ],
 		       },
@@ -87,10 +87,11 @@ function generateFileMetadata({
 	}
 
        return {
+	       title: filename,
 	       openGraph: {
+		       title: filename,
 		       type: "website",
 		       url: fileUrl,
-		       siteName: filename,
 	       },
 	       twitter: {
 		       card: "summary_large_image",
