@@ -15,6 +15,7 @@ import type {
 	ErrorResponse,
 } from "@/types/uploads";
 import { EXPIRES_MAP } from "@/types/uploads";
+import { getMediaDimensions, isMediaType } from "@/lib/media";
 
 export async function POST(req: NextRequest) {
 	try {
@@ -84,6 +85,26 @@ export async function POST(req: NextRequest) {
 
 		await deleteMultipartUploadState(bucket, body.uploadId);
 
+		let width: number | undefined;
+		let height: number | undefined;
+
+		if (isMediaType(body.mimeType)) {
+			try {
+				const r2Object = await bucket.get(finalKey);
+				if (r2Object) {
+					const arrayBuffer = await r2Object.arrayBuffer();
+					const buffer = Buffer.from(arrayBuffer);
+					const dimensions = await getMediaDimensions(buffer, body.mimeType);
+					if (dimensions) {
+						width = dimensions.width;
+						height = dimensions.height;
+					}
+				}
+			} catch (dimensionError) {
+				console.error("Error extracting dimensions:", dimensionError);
+			}
+		}
+
 		const expiresAt = new Date(Date.now() + EXPIRES_MAP[body.expires]);
 
 		const upload = await prisma.upload.create({
@@ -93,6 +114,8 @@ export async function POST(req: NextRequest) {
 				filesize: body.filesize,
 				mimeType: body.mimeType,
 				domain: body.domain || "",
+				width,
+				height,
 				expiresAt,
 			},
 		});
@@ -108,6 +131,8 @@ export async function POST(req: NextRequest) {
 			slug: upload.slug,
 			url,
 			expiresAt: upload.expiresAt.toISOString(),
+			width: upload.width ?? undefined,
+			height: upload.height ?? undefined,
 		};
 
 		return NextResponse.json(response);

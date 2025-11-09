@@ -8,6 +8,96 @@ interface SlugPageProps {
 	params: Promise<{ slug: string }>;
 }
 
+function getFileType(mimeType: string): "VIDEO" | "IMAGE" | "OTHER" {
+	if (mimeType.startsWith("video/")) return "VIDEO";
+	if (mimeType.startsWith("image/")) return "IMAGE";
+	return "OTHER";
+}
+
+function generateFileMetadata({
+	filename,
+	mimeType,
+	fileUrl,
+	width,
+	height,
+}: {
+	filename: string;
+	mimeType: string;
+	fileUrl: string;
+	width?: number | null;
+	height?: number | null;
+}): Metadata {
+	const fileType = getFileType(mimeType);
+
+	const dimensions = {
+		width: typeof width === "number" ? width : 1280,
+		height: typeof height === "number" ? height : 720,
+	};
+
+	if (fileType === "VIDEO") {
+		return {
+		       openGraph: {
+			       type: "video.other",
+			       url: fileUrl,
+			       siteName: filename,
+			       videos: [
+				       {
+					       url: fileUrl,
+					       width: dimensions.width,
+					       height: dimensions.height,
+					       type: mimeType,
+				       },
+			       ],
+			       images: [
+				       {
+					       url: fileUrl,
+					       width: dimensions.width,
+					       height: dimensions.height,
+					       alt: `${filename} thumbnail`,
+				       },
+			       ],
+		       },
+		       twitter: {
+			       card: "summary_large_image",
+			       images: [fileUrl],
+		       },
+		};
+	}
+
+	if (fileType === "IMAGE") {
+	       return {
+		       openGraph: {
+			       type: "website",
+			       url: fileUrl,
+			       siteName: filename,
+			       images: [
+				       {
+					       url: fileUrl,
+					       width: dimensions.width,
+					       height: dimensions.height,
+					       alt: filename,
+				       },
+			       ],
+		       },
+		       twitter: {
+			       card: "summary_large_image",
+			       images: [fileUrl],
+		       },
+	       };
+	}
+
+       return {
+	       openGraph: {
+		       type: "website",
+		       url: fileUrl,
+		       siteName: filename,
+	       },
+	       twitter: {
+		       card: "summary_large_image",
+	       },
+       };
+}
+
 export async function generateMetadata({
 	params,
 }: SlugPageProps): Promise<Metadata> {
@@ -18,61 +108,26 @@ export async function generateMetadata({
 		select: {
 			filename: true,
 			mimeType: true,
+			width: true,
+			height: true,
 		},
 	});
 
 	if (!record) {
 		return {
-			title: "Not Found",
+			title: "File not found",
 		};
 	}
 
-	const r2Url = `${process.env.R2_PUBLIC_BASE_URL}/${slug}/${encodeURIComponent(record.filename)}`;
-	const isVideo = record.mimeType.startsWith("video/");
+	const fileUrl = `${process.env.R2_PUBLIC_BASE_URL}/${slug}/${encodeURIComponent(record.filename)}`;
 
-	const metadata: Metadata = {
-		title: record.filename,
-		openGraph: {
-			title: record.filename,
-			type: isVideo ? "video.other" : "website",
-			siteName: "Hallaxius",
-		},
-		twitter: {
-			card: isVideo ? "summary_large_image" : "summary",
-			title: record.filename,
-		},
-	};
-
-	if (isVideo) {
-		metadata.openGraph = {
-			...metadata.openGraph,
-			videos: [
-				{
-					url: r2Url,
-					type: record.mimeType,
-				},
-			],
-			images: [
-				{
-					url: r2Url,
-					alt: record.filename,
-					width: 1200,
-					height: 630,
-				},
-			],
-		};
-		metadata.twitter = {
-			...metadata.twitter,
-			images: [
-				{
-					url: r2Url,
-					alt: record.filename,
-				},
-			],
-		};
-	}
-
-	return metadata;
+	return generateFileMetadata({
+		filename: record.filename,
+		mimeType: record.mimeType,
+		fileUrl,
+		width: record.width,
+		height: record.height,
+	});
 }
 
 export default async function SlugPage({ params }: SlugPageProps) {

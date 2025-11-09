@@ -62,6 +62,8 @@ export interface UploadResponse {
 	slug: string;
 	url: string;
 	expiresAt: string;
+	width?: number;
+	height?: number;
 }
 
 export interface ErrorResponse {

@@ -11,6 +11,7 @@ import {
 import { generateSlug } from "@/lib/utils";
 import type { UploadResponse, ErrorResponse } from "@/types/uploads";
 import { EXPIRES_MAP, DIRECT_UPLOAD_LIMIT } from "@/types/uploads";
+import { getMediaDimensions, isMediaType } from "@/lib/media";
 
 export async function POST(req: NextRequest) {
 	try {
@@ -116,6 +117,17 @@ export async function POST(req: NextRequest) {
 
 		await uploadToR2(bucket, key, buffer, mimeType);
 
+		let width: number | undefined;
+		let height: number | undefined;
+
+		if (isMediaType(mimeType)) {
+			const dimensions = await getMediaDimensions(buffer, mimeType);
+			if (dimensions) {
+				width = dimensions.width;
+				height = dimensions.height;
+			}
+		}
+
 		const expiresAt = new Date(
 			Date.now() + EXPIRES_MAP[expires as keyof typeof EXPIRES_MAP],
 		);
@@ -127,6 +139,8 @@ export async function POST(req: NextRequest) {
 				filesize,
 				mimeType,
 				domain: domain || "",
+				width,
+				height,
 				expiresAt,
 			},
 		});
@@ -138,6 +152,8 @@ export async function POST(req: NextRequest) {
 			slug: upload.slug,
 			url,
 			expiresAt: upload.expiresAt.toISOString(),
+			width: upload.width ?? undefined,
+			height: upload.height ?? undefined,
 		};
 
 		return NextResponse.json(response);

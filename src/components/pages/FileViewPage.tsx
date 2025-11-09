@@ -246,7 +246,11 @@ export default function FileViewPage({
 						</div>
 
 						<div className="flex flex-col gap-2 mt-auto">
-							<Button onClick={handleDownload} size="sm" className="w-full cursor-pointer">
+							<Button
+								onClick={handleDownload}
+								size="sm"
+								className="w-full cursor-pointer"
+							>
 								<Download className="h-4 w-4 mr-2" />
 								Download
 							</Button>

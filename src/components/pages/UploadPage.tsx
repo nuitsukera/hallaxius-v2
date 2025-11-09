@@ -47,7 +47,7 @@ export default function UploadPage() {
 	const [uploadUrl, setUploadUrl] = useState("");
 	const [copied, setCopied] = useState(false);
 	const [selectedDomain, setSelectedDomain] = useState("");
-	const [selectedExpires, setSelectedExpires] = useState<ExpiresOption>("7d");
+	const [selectedExpires, setSelectedExpires] = useState<ExpiresOption>("1h");
 	const [domains, setDomains] = useState<DomainOption[]>([]);
 	const [isLoadingDomains, setIsLoadingDomains] = useState(true);
 	const [isRefreshingDomains, setIsRefreshingDomains] = useState(false);
@@ -59,7 +59,12 @@ export default function UploadPage() {
 				const data = await getDomains();
 				setDomains(data);
 				if (data.length > 0 && !selectedDomain) {
-					setSelectedDomain(data[0].value);
+					const hallaxiusDomain = data.find((d) => d.value === "hallaxi.us");
+					if (hallaxiusDomain) {
+						setSelectedDomain(hallaxiusDomain.value);
+					} else {
+						setSelectedDomain(data[0].value);
+					}
 				}
 			} catch (error) {
 				console.error("Error loading domains:", error);
@@ -151,7 +156,7 @@ export default function UploadPage() {
 			const uploadedParts: Array<{ partNumber: number; etag: string }> = [];
 			let uploadedChunks = 0;
 
-			const maxConcurrentUploads = 3; // EM CASOS DE ERROS MUDAR PARA 2
+			const maxConcurrentUploads = 3; // IN CASE OF ERRORS, CHANGE TO 2
 
 			const uploadChunk = async (chunkIndex: number): Promise<void> => {
 				const start = chunkIndex * CHUNK_SIZE;

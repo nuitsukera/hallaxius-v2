@@ -1,10 +1,10 @@
 {
 	"name": "hallaxius-v2",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"private": true,
 	"scripts": {
 		"dev": "next dev --turbopack",
-		"build": "prisma generate && next build",
+		"build": "prisma generate --no-engine && next build",
 		"start": "next start",
 		"deploy": "prisma generate --no-engine && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
 		"preview": "prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare preview",

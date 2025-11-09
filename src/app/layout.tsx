@@ -1,30 +1,23 @@
-import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
-import { fontClassName } from "@/config/fonts";
+import { Root } from '@/components/layout';
 
-export { metadata } from "@/config/metadata";
+export const metadata = {
+  icons: {
+    icon: '/favicon.png',
+    shortcut: '/favicon.png',
+  },
+  openGraph: {
+    url: 'https://hallaxi.us',
+    siteName: 'Hallaxius',
+    type: 'website',
+    locale: 'en_US',
+  },
+  metadataBase: new URL('https://hallaxi.us'),
+};
 
 export default function RootLayout({
-	children,
-}: Readonly<{ children: React.ReactNode }>) {
-	return (
-		<html
-			lang="en"
-			suppressHydrationWarning
-			className="select-none cursor-default"
-		>
-			<body className={`${fontClassName} bg-background text-foreground`}>
-				<ThemeProvider
-					attribute="class"
-					defaultTheme="dark"
-					enableSystem
-					disableTransitionOnChange
-				>
-					{children}
-				</ThemeProvider>
-				<Toaster />
-			</body>
-		</html>
-	);
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <Root>{children}</Root>;
 }
