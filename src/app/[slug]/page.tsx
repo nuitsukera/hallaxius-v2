@@ -36,67 +36,87 @@ function generateFileMetadata({
 
 	if (fileType === "VIDEO") {
 		return {
-		       title: filename,
-		       openGraph: {
-			       title: filename,
-			       type: "video.other",
-			       url: fileUrl,
-			       videos: [
-				       {
-					       url: fileUrl,
-					       width: dimensions.width,
-					       height: dimensions.height,
-					       type: mimeType,
-				       },
-			       ],
-			       images: [
-				       {
-					       url: fileUrl,
-					       width: dimensions.width,
-					       height: dimensions.height,
-				       },
-			       ],
-		       },
-		       twitter: {
-			       card: "summary_large_image",
-			       images: [fileUrl],
-		       },
+			title: filename,
+			description: undefined,
+			openGraph: {
+				title: filename,
+				description: undefined,
+				type: "video.other",
+				url: fileUrl,
+				videos: [
+					{
+						url: fileUrl,
+						width: dimensions.width,
+						height: dimensions.height,
+						type: mimeType,
+					},
+				],
+				images: [
+					{
+						url: fileUrl + "?thumb=1",
+						width: dimensions.width,
+						height: dimensions.height,
+						alt: filename ? `${filename} thumbnail` : "Video thumbnail",
+						type: "image/jpeg",
+					},
+				],
+			},
+			twitter: {
+				card: "player",
+				title: filename,
+				description: undefined,
+				images: [fileUrl + "?thumb=1"],
+				players: [
+					{
+						playerUrl: fileUrl,
+						streamUrl: fileUrl,
+						width: dimensions.width,
+						height: dimensions.height,
+					},
+				],
+			},
 		};
 	}
 
 	if (fileType === "IMAGE") {
-	       return {
-		       title: filename,
-		       openGraph: {
-			       title: filename,
-			       type: "website",
-			       url: fileUrl,
-			       images: [
-				       {
-					       url: fileUrl,
-					       width: dimensions.width,
-					       height: dimensions.height,
-				       },
-			       ],
-		       },
-		       twitter: {
-			       card: "summary_large_image",
-			       images: [fileUrl],
-		       },
-	       };
+		return {
+			title: filename,
+			description: undefined,
+			openGraph: {
+				title: filename,
+				description: undefined,
+				type: "website",
+				url: fileUrl,
+				images: [
+					{
+						url: fileUrl,
+						width: dimensions.width,
+						height: dimensions.height,
+						alt: filename,
+						type: "image/jpeg",
+					},
+				],
+			},
+			twitter: {
+				card: "summary_large_image",
+				title: filename,
+				description: undefined,
+				images: [fileUrl],
+			},
+		};
 	}
 
-       return {
-	       title: filename,
-	       openGraph: {
-		       title: filename,
-		       type: "website",
-		       url: fileUrl,
-	       },
-	       twitter: {
-		       card: "summary_large_image",
-	       },
-       };
+	return {
+		title: filename,
+		openGraph: {
+			title: filename,
+			type: "website",
+			url: fileUrl,
+		},
+		twitter: {
+			card: "summary_large_image",
+		},
+	};
 }
 
 export async function generateMetadata({
