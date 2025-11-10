@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import ErrorPage from "@/components/pages/ErrorPage";
-import FileViewPage from "@/components/pages/FileViewPage";
 import { getFileUrl } from "@/lib/url";
-import { ThemeProvider } from "@/components/theme-provider";
+import { SlugPageContent } from "@/components/pages/SlugPageContent";
 
 interface SlugPageProps {
 	params: Promise<{ slug: string }>;
@@ -154,84 +151,6 @@ export async function generateMetadata({
 }
 
 export default async function SlugPage({ params }: SlugPageProps) {
-	const { slug } = await params;
-
-	if (!slug) {
-		return (
-			<ErrorPage
-				title="Not found"
-				description="This file does not exist or has expired."
-			/>
-		);
-	}
-
-	const record = await prisma.upload.findUnique({
-		where: { slug },
-		select: {
-			slug: true,
-			filename: true,
-			domain: true,
-			expiresAt: true,
-			mimeType: true,
-			filesize: true,
-			uploadAt: true,
-		},
-	});
-
-	if (!record) {
-		return (
-			<ErrorPage
-				title="Not found"
-				description="This file does not exist or has expired."
-			/>
-		);
-	}
-
-	const isExpired = record.expiresAt && new Date(record.expiresAt) < new Date();
-	if (isExpired) {
-		return (
-			<ErrorPage
-				title="Not found"
-				description="This file does not exist or has expired."
-			/>
-		);
-	}
-
-	const headersList = await headers();
-	const currentDomain = headersList.get("host");
-
-	if (record.domain && currentDomain) {
-		const recordDomain = record.domain.toLowerCase();
-		const requestDomain = currentDomain.toLowerCase();
-
-		if (recordDomain !== requestDomain) {
-			return (
-				<ErrorPage
-					title="Not found"
-					description="This file does not exist or has expired."
-				/>
-			);
-		}
-	}
-
-	const fileUrl = getFileUrl(slug, record.filename);
-
-	return (
-		<ThemeProvider
-			attribute="class"
-			defaultTheme="dark"
-			forcedTheme="dark"
-			enableSystem={false}
-			disableTransitionOnChange
-		>
-			<FileViewPage
-				filename={record.filename}
-				fileUrl={fileUrl}
-				mimeType={record.mimeType}
-				filesize={record.filesize}
-				uploadAt={record.uploadAt}
-				expiresAt={record.expiresAt}
-			/>
-		</ThemeProvider>
-	);
+	const awaitedParams = await params;
+	return <SlugPageContent params={awaitedParams} />;
 }

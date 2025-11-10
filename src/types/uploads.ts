@@ -76,3 +76,23 @@ export interface DomainOption {
 	value: string;
 	label: string;
 }
+
+export interface SlugPageContentProps {
+	params: { slug: string };
+}
+
+export interface UploadRecord {
+	slug: string;
+	filename: string;
+	domain: string | null;
+	expiresAt: string | null;
+	mimeType: string;
+	filesize: number | null;
+	uploadAt: string;
+}
+
+export interface ApiResponse {
+	success: boolean;
+	record?: UploadRecord;
+	error?: string;
+}
