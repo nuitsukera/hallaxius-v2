@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import ErrorPage from "@/components/pages/ErrorPage";
 import FileViewPage from "@/components/pages/FileViewPage";
+import { getFileUrl } from "@/lib/url";
+import { ThemeProvider } from "@/components/theme-provider";
 
 interface SlugPageProps {
 	params: Promise<{ slug: string }>;
@@ -140,7 +142,7 @@ export async function generateMetadata({
 		};
 	}
 
-	const fileUrl = `${process.env.R2_PUBLIC_BASE_URL}/${slug}/${encodeURIComponent(record.filename)}`;
+	const fileUrl = getFileUrl(slug, record.filename);
 
 	return generateFileMetadata({
 		filename: record.filename,
@@ -212,16 +214,24 @@ export default async function SlugPage({ params }: SlugPageProps) {
 		}
 	}
 
-	const r2Url = `${process.env.R2_PUBLIC_BASE_URL}/${slug}/${encodeURIComponent(record.filename)}`;
+	const fileUrl = getFileUrl(slug, record.filename);
 
 	return (
-		<FileViewPage
-			filename={record.filename}
-			fileUrl={r2Url}
-			mimeType={record.mimeType}
-			filesize={record.filesize}
-			uploadAt={record.uploadAt}
-			expiresAt={record.expiresAt}
-		/>
+		<ThemeProvider
+			attribute="class"
+			defaultTheme="dark"
+			forcedTheme="dark"
+			enableSystem={false}
+			disableTransitionOnChange
+		>
+			<FileViewPage
+				filename={record.filename}
+				fileUrl={fileUrl}
+				mimeType={record.mimeType}
+				filesize={record.filesize}
+				uploadAt={record.uploadAt}
+				expiresAt={record.expiresAt}
+			/>
+		</ThemeProvider>
 	);
 }

@@ -1,9 +1,11 @@
 import { Root } from "@/components/layout";
+import { title } from "process";
 
 export const metadata = {
+	title: "Hallaxius",
 	icons: {
-		icon: "/favicon.png",
-		shortcut: "/favicon.png",
+		icon: "/favicon.webp",
+		shortcut: "/favicon.webp",
 	},
 	openGraph: {
 		url: "https://hallaxi.us",

@@ -28,6 +28,8 @@ import type {
 } from "@/types/uploads";
 import { CHUNK_SIZE, DIRECT_UPLOAD_LIMIT } from "@/types/uploads";
 import { getDomains, refreshDomains } from "@/lib/domains";
+import { getWebhook } from "@/lib/settings";
+import { sendWebhookNotification } from "@/lib/webhook";
 
 const formatBytes = (bytes: number): string => {
 	if (bytes === 0) return "0 Bytes";
@@ -47,11 +49,12 @@ export default function UploadPage() {
 	const [uploadUrl, setUploadUrl] = useState("");
 	const [copied, setCopied] = useState(false);
 	const [selectedDomain, setSelectedDomain] = useState("");
-	const [selectedExpires, setSelectedExpires] = useState<ExpiresOption>("1h");
+	const [selectedExpires, setSelectedExpires] = useState<ExpiresOption>("1d");
 	const [domains, setDomains] = useState<DomainOption[]>([]);
 	const [isLoadingDomains, setIsLoadingDomains] = useState(true);
 	const [isRefreshingDomains, setIsRefreshingDomains] = useState(false);
 	const [refreshSuccess, setRefreshSuccess] = useState(false);
+	const [showProgress, setShowProgress] = useState(false);
 
 	useEffect(() => {
 		const loadDomains = async () => {
@@ -110,6 +113,17 @@ export default function UploadPage() {
 			const result: UploadResponse = await response.json();
 			setUploadUrl(result.url);
 			setSelectedFile(null);
+
+			const webhookUrl = getWebhook();
+			if (webhookUrl) {
+				await sendWebhookNotification(
+					result.url,
+					file.name,
+					file.size,
+					result.slug,
+				);
+			}
+
 			toast.success("Upload complete!", {
 				description: `File uploaded successfully`,
 			});
@@ -156,7 +170,7 @@ export default function UploadPage() {
 			const uploadedParts: Array<{ partNumber: number; etag: string }> = [];
 			let uploadedChunks = 0;
 
-			const maxConcurrentUploads = 3; // IN CASE OF ERRORS, CHANGE TO 2
+			const maxConcurrentUploads = 3;
 
 			const uploadChunk = async (chunkIndex: number): Promise<void> => {
 				const start = chunkIndex * CHUNK_SIZE;
@@ -199,12 +213,12 @@ export default function UploadPage() {
 
 						uploadedChunks++;
 						setUploadProgress(Math.round((uploadedChunks / totalChunks) * 100));
-						console.log(`[Chunk ${chunkIndex + 1}/${totalChunks}] ✅ Success`);
+						console.log(`[Chunk ${chunkIndex + 1}/${totalChunks}] Success`);
 						return;
 					} catch (error) {
 						retryCount++;
 						console.error(
-							`[Chunk ${chunkIndex + 1}/${totalChunks}] ❌ Attempt ${retryCount}/${maxRetries} failed:`,
+							`[Chunk ${chunkIndex + 1}/${totalChunks}] Attempt ${retryCount}/${maxRetries} failed:`,
 							error,
 						);
 						if (retryCount >= maxRetries) {
@@ -240,7 +254,7 @@ export default function UploadPage() {
 
 				await Promise.all(batchPromises);
 				console.log(
-					`[Batch ${Math.floor(i / maxConcurrentUploads) + 1}] ✅ Completed`,
+					`[Batch ${Math.floor(i / maxConcurrentUploads) + 1}] Completed`,
 				);
 			}
 			console.log(`[Upload] All chunks uploaded successfully`);
@@ -281,6 +295,17 @@ export default function UploadPage() {
 			const result: UploadResponse = await completeResponse.json();
 			setUploadUrl(result.url);
 			setSelectedFile(null);
+
+			const webhookUrl = getWebhook();
+			if (webhookUrl) {
+				await sendWebhookNotification(
+					result.url,
+					file.name,
+					file.size,
+					result.slug,
+				);
+			}
+
 			toast.success("Upload complete!", {
 				description: `File uploaded successfully`,
 			});
@@ -296,6 +321,7 @@ export default function UploadPage() {
 
 	const handleUpload = async (file: File) => {
 		setIsUploading(true);
+		setShowProgress(true);
 		setUploadProgress(0);
 
 		try {
@@ -307,7 +333,14 @@ export default function UploadPage() {
 			}
 		} catch (error) {
 		} finally {
-			setIsUploading(false);
+			// Espera um pouco para garantir que a progress bar mostre 100%
+			setTimeout(() => {
+				setShowProgress(false);
+				// Só mostra o input do URL após a progress bar desaparecer
+				setTimeout(() => {
+					setIsUploading(false);
+				}, 300);
+			}, 300);
 		}
 	};
 
@@ -475,7 +508,7 @@ export default function UploadPage() {
 							disabled={isRefreshingDomains || isLoadingDomains}
 							size="icon"
 							variant="outline"
-							className="shrink-0 relative cursor-pointer"
+							className="shrink-0 relative"
 						>
 							<RefreshCw
 								className={`h-4 w-4 absolute transition-all duration-300 ${
@@ -504,7 +537,7 @@ export default function UploadPage() {
 						<Button
 							type="button"
 							onClick={handleSelectFile}
-							className="w-full border-2 border-dashed border-input rounded-2xl p-16 sm:p-20 md:p-24 text-center cursor-pointer select-none bg-transparent duration-300 hover:bg-accent/50 h-auto disabled:opacity-50 disabled:hover:bg-transparent"
+							className="w-full border-2 border-dashed border-input rounded-2xl p-16 sm:p-20 md:p-24 text-center select-none bg-transparent duration-300 hover:bg-accent/50 h-auto disabled:opacity-50 disabled:hover:bg-transparent"
 						>
 							<div className="flex flex-col items-center gap-3 w-full">
 								{selectedFile ? (
@@ -559,7 +592,7 @@ export default function UploadPage() {
 				</ContextMenu>
 			</div>
 
-			{isUploading && (
+			{showProgress && (
 				<div className="mt-6">
 					<div className="relative">
 						<div className="flex justify-end mb-1">
@@ -570,15 +603,11 @@ export default function UploadPage() {
 				</div>
 			)}
 
-			{uploadUrl && (
+			{uploadUrl && !showProgress && (
 				<div className="mt-6">
 					<div className="flex gap-2">
 						<Input value={uploadUrl} readOnly className="flex-1" />
-						<Button
-							onClick={handleCopyUrl}
-							size="icon"
-							className="relative cursor-pointer"
-						>
+						<Button onClick={handleCopyUrl} size="icon" className="relative">
 							<Copy
 								className={`h-4 w-4 absolute transition-all duration-300 ${
 									copied

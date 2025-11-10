@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Music, FileText, File, Archive, Download } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+
 import { toast } from "sonner";
 
 interface FileViewPageProps {
@@ -72,16 +73,22 @@ function getFileType(mimeType: string): string {
 }
 
 function getAspectRatioClass(ratio: number): string {
-	if (Math.abs(ratio - 1) < 0.1) return "aspect-square";
+	if (ratio >= 2.8) return "aspect-[21/9]";
+	if (Math.abs(ratio - 21 / 9) < 0.2) return "aspect-[21/9]";
+	if (Math.abs(ratio - 3 / 1) < 0.2) return "aspect-[21/9]";
+
+	if (Math.abs(ratio - 2 / 1) < 0.15) return "aspect-[2/1]";
+	if (Math.abs(ratio - 16 / 9) < 0.2) return "aspect-video";
+
 	if (Math.abs(ratio - 4 / 3) < 0.1) return "aspect-[4/3]";
-	if (Math.abs(ratio - 16 / 9) < 0.15) return "aspect-video";
-	if (Math.abs(ratio - 21 / 9) < 0.15) return "aspect-[21/9]";
-	if (Math.abs(ratio - 3 / 4) < 0.1) return "aspect-[3/4]";
-	if (Math.abs(ratio - 9 / 16) < 0.1) return "aspect-[9/16]";
-	if (Math.abs(ratio - 2 / 1) < 0.1) return "aspect-[2/1]";
 	if (Math.abs(ratio - 5 / 4) < 0.1) return "aspect-[5/4]";
 
-	return "";
+	if (Math.abs(ratio - 1) < 0.1) return "aspect-square";
+
+	if (Math.abs(ratio - 3 / 4) < 0.1) return "aspect-[3/4]";
+	if (Math.abs(ratio - 9 / 16) < 0.1) return "aspect-[9/16]";
+
+	return ratio > 1 ? "aspect-video" : "aspect-square";
 }
 
 export default function FileViewPage({
@@ -131,12 +138,17 @@ export default function FileViewPage({
 	const aspectRatioClass = imageDimensions?.aspectRatio || "aspect-video";
 	const maxWidthClass = "max-w-7xl";
 
+	const ratio = imageDimensions
+		? imageDimensions.width / imageDimensions.height
+		: 1;
+	const finalAspectClass = ratio < 0.75 ? "aspect-square" : aspectRatioClass;
+
 	return (
 		<div className="min-h-screen flex items-center justify-center py-8 px-4">
 			<Card className={`w-full ${maxWidthClass}`}>
 				<div className="flex flex-col lg:flex-row">
 					<div
-						className={`relative w-full lg:w-3/5 overflow-hidden rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg lg:border-r border-border ${fileType === "IMAGE" && imageDimensions ? aspectRatioClass : ""}`}
+						className={`relative w-full lg:w-3/5 overflow-hidden rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg lg:border-r border-border ${fileType === "IMAGE" && imageDimensions ? finalAspectClass : ""}`}
 					>
 						{(() => {
 							switch (fileType) {
@@ -180,22 +192,16 @@ export default function FileViewPage({
 									);
 								case "IMAGE":
 								default:
-									return imageDimensions ? (
+									return (
 										<div className="relative w-full h-full">
 											<Image
 												src={fileUrl}
 												alt={filename}
 												fill
-												className="object-cover rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg"
+												className="object-contain rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg"
 												priority
 												sizes="(max-width: 1024px) 100vw, 60vw"
 											/>
-										</div>
-									) : (
-										<div className="flex w-full items-center justify-center py-16">
-											<div className="animate-pulse text-muted-foreground">
-												Loading...
-											</div>
 										</div>
 									);
 							}
@@ -246,11 +252,7 @@ export default function FileViewPage({
 						</div>
 
 						<div className="flex flex-col gap-2 mt-auto">
-							<Button
-								onClick={handleDownload}
-								size="sm"
-								className="w-full cursor-pointer"
-							>
+							<Button onClick={handleDownload} size="sm" className="w-full">
 								<Download className="h-4 w-4 mr-2" />
 								Download
 							</Button>
