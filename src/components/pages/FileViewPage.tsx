@@ -1,27 +1,68 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Music, FileText, File, Archive, Download } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-
+import { Download } from "lucide-react";
+import {
+	ContextMenu,
+	ContextMenuTrigger,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuSeparator,
+} from "@/components/ui/context-menu";
 import { toast } from "sonner";
+import { MediaPlayer, MediaProvider } from "@vidstack/react";
+import {
+	DefaultVideoLayout,
+	defaultLayoutIcons,
+} from "@vidstack/react/player/layouts/default";
+import type { DefaultLayoutIcons } from "@vidstack/react/player/layouts/default";
+import { TimeSlider } from "@vidstack/react";
+
+import "@vidstack/react/player/styles/default/theme.css";
+import "@vidstack/react/player/styles/default/layouts/video.css";
 
 interface FileViewPageProps {
+	slug: string;
 	filename: string;
 	fileUrl: string;
 	mimeType: string;
 	filesize: number;
 	uploadAt: Date;
 	expiresAt: Date;
+	uploadId: string;
 }
 
-interface ImageDimensions {
-	width: number;
-	height: number;
-	aspectRatio: string;
-}
+const None = () => null;
+
+const customIcons: DefaultLayoutIcons = {
+	...defaultLayoutIcons,
+	AirPlayButton: { Default: None, Connecting: None, Connected: None },
+	GoogleCastButton: { Default: None, Connecting: None, Connected: None },
+	CaptionButton: { On: None, Off: None },
+	DownloadButton: { Default: None },
+	Menu: {
+		...defaultLayoutIcons.Menu,
+		Accessibility: None,
+		Chapters: None,
+		Captions: None,
+		Playback: None,
+		FontSizeUp: None,
+		FontSizeDown: None,
+		OpacityUp: None,
+		OpacityDown: None,
+		RadioCheck: None,
+	},
+	KeyboardDisplay: {
+		...defaultLayoutIcons.KeyboardDisplay,
+		CaptionsOn: None,
+		CaptionsOff: None,
+		SeekForward: None,
+		SeekBackward: None,
+	},
+	PlayButton: { ...defaultLayoutIcons.PlayButton },
+	MuteButton: { ...defaultLayoutIcons.MuteButton },
+};
 
 function formatBytes(bytes: number): string {
 	if (bytes === 0) return "0 Bytes";
@@ -34,245 +75,195 @@ function formatBytes(bytes: number): string {
 }
 
 function formatDate(date: Date): string {
-	const time = new Intl.DateTimeFormat("pt-BR", {
+	return new Intl.DateTimeFormat("en-US", {
 		hour: "2-digit",
 		minute: "2-digit",
-	}).format(date);
-
-	const dateStr = new Intl.DateTimeFormat("pt-BR", {
 		day: "2-digit",
 		month: "2-digit",
 		year: "numeric",
 	}).format(date);
-
-	return `${time} - ${dateStr}`;
 }
 
-function getFileType(mimeType: string): string {
+function getFileType(mimeType: string): "IMAGE" | "VIDEO" {
 	if (mimeType.startsWith("image/")) return "IMAGE";
 	if (mimeType.startsWith("video/")) return "VIDEO";
-	if (mimeType.startsWith("audio/")) return "AUDIO";
-	if (mimeType.startsWith("text/")) return "TEXT";
-	if (
-		mimeType.includes("pdf") ||
-		mimeType.includes("document") ||
-		mimeType.includes("word") ||
-		mimeType.includes("excel") ||
-		mimeType.includes("powerpoint")
-	)
-		return "DOCUMENT";
-	if (
-		mimeType.includes("zip") ||
-		mimeType.includes("rar") ||
-		mimeType.includes("7z") ||
-		mimeType.includes("tar") ||
-		mimeType.includes("gz")
-	)
-		return "ARCHIVE";
-	return "DOCUMENT";
-}
-
-function getAspectRatioClass(ratio: number): string {
-	if (ratio >= 2.8) return "aspect-[21/9]";
-	if (Math.abs(ratio - 21 / 9) < 0.2) return "aspect-[21/9]";
-	if (Math.abs(ratio - 3 / 1) < 0.2) return "aspect-[21/9]";
-
-	if (Math.abs(ratio - 2 / 1) < 0.15) return "aspect-[2/1]";
-	if (Math.abs(ratio - 16 / 9) < 0.2) return "aspect-video";
-
-	if (Math.abs(ratio - 4 / 3) < 0.1) return "aspect-[4/3]";
-	if (Math.abs(ratio - 5 / 4) < 0.1) return "aspect-[5/4]";
-
-	if (Math.abs(ratio - 1) < 0.1) return "aspect-square";
-
-	if (Math.abs(ratio - 3 / 4) < 0.1) return "aspect-[3/4]";
-	if (Math.abs(ratio - 9 / 16) < 0.1) return "aspect-[9/16]";
-
-	return ratio > 1 ? "aspect-video" : "aspect-square";
+	throw new Error("Unsupported file type");
 }
 
 export default function FileViewPage({
+	slug,
 	filename,
 	fileUrl,
 	mimeType,
 	filesize,
 	uploadAt,
 	expiresAt,
+	uploadId,
 }: FileViewPageProps) {
 	const fileType = getFileType(mimeType);
-	const [imageDimensions, setImageDimensions] =
-		useState<ImageDimensions | null>(null);
+	const [imageDimensions, setImageDimensions] = useState<{
+		width: number;
+		height: number;
+	} | null>(null);
+	const [menuOpen, setMenuOpen] = useState(false);
+	const triggerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		if (fileType === "IMAGE") {
-			const img = document.createElement("img");
+			const img = new window.Image();
 			img.src = fileUrl;
-			img.onload = () => {
-				const ratio = img.naturalWidth / img.naturalHeight;
-				setImageDimensions({
-					width: img.naturalWidth,
-					height: img.naturalHeight,
-					aspectRatio: getAspectRatioClass(ratio),
-				});
-			};
+			img.onload = () =>
+				setImageDimensions({ width: img.width, height: img.height });
 		}
 	}, [fileUrl, fileType]);
 
-	const handleDownload = () => {
-		const slug = window.location.pathname.split("/").filter(Boolean)[0];
+	useEffect(() => {
+		const handleRightClick = (e: MouseEvent) => {
+			if (menuOpen) {
+				e.preventDefault();
+				setMenuOpen(false);
+			}
+		};
+		document.addEventListener("contextmenu", handleRightClick);
+		return () => document.removeEventListener("contextmenu", handleRightClick);
+	}, [menuOpen]);
 
-		const downloadUrl = `/api/download/${slug}`;
+	const handleDownload = async () => {
+		try {
+			const tokenResponse = await fetch("/api/download/token", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ uploadId }),
+			});
 
-		const link = document.createElement("a");
-		link.href = downloadUrl;
-		link.download = filename;
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
+			if (!tokenResponse.ok) {
+				let errMessage = "Failed to get download token";
+				try {
+					const errJson = (await tokenResponse.json()) as { error?: string };
+					if (errJson && "error" in errJson) {
+						errMessage = errJson.error || errMessage;
+					}
+				} catch {}
+				toast.error(errMessage);
+				return;
+			}
 
-		toast.success("Download started!", {
-			description: "Your file is being downloaded",
-		});
+			const data = (await tokenResponse.json()) as { token?: string };
+
+			if (!data.token) {
+				toast.error("Invalid response from server");
+				return;
+			}
+
+			const downloadResponse = await fetch("/api/download", {
+				headers: {
+					"x-download-token": data.token,
+				},
+			});
+
+			if (!downloadResponse.ok) {
+				let errMessage = "Download failed";
+				try {
+					const errJson = (await downloadResponse.json()) as { error?: string };
+					if (errJson && "error" in errJson) {
+						errMessage = errJson.error || errMessage;
+					}
+				} catch {}
+				toast.error(errMessage);
+				return;
+			}
+
+			const blob = await downloadResponse.blob();
+			const url = window.URL.createObjectURL(blob);
+			const link = document.createElement("a");
+			link.href = url;
+			link.download = filename;
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			window.URL.revokeObjectURL(url);
+
+			toast.success("Download started!", {
+				description: "Your file is being downloaded",
+			});
+		} catch (error) {
+			console.error("Download failed:", error);
+			toast.error("Download failed. Please try again.");
+		}
 	};
 
-	const aspectRatioClass = imageDimensions?.aspectRatio || "aspect-video";
-	const maxWidthClass = "max-w-7xl";
-
-	const ratio = imageDimensions
-		? imageDimensions.width / imageDimensions.height
-		: 1;
-	const finalAspectClass = ratio < 0.75 ? "aspect-square" : aspectRatioClass;
-
 	return (
-		<div className="min-h-screen flex items-center justify-center py-8 px-4">
-			<Card className={`w-full ${maxWidthClass}`}>
-				<div className="flex flex-col lg:flex-row">
-					<div
-						className={`relative w-full lg:w-3/5 overflow-hidden rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg lg:border-r border-border ${fileType === "IMAGE" && imageDimensions ? finalAspectClass : ""}`}
-					>
-						{(() => {
-							switch (fileType) {
-								case "VIDEO":
-									return (
-										<video
-											src={fileUrl}
-											controls
-											className="w-full h-auto rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg"
-											autoPlay
-											playsInline
-										>
-											<track
-												kind="captions"
-												srcLang="en"
-												label="English"
-												src=""
-											/>
-										</video>
-									);
-								case "AUDIO":
-									return (
-										<div className="flex w-full flex-col items-center justify-center gap-4 rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg py-16">
-											<Music className="text-muted-foreground h-16 w-16" />
-											<audio controls className="w-3/4">
-												<source src={fileUrl} type={mimeType} />
-												<track
-													kind="captions"
-													srcLang="en"
-													label="English"
-													src=""
-												/>
-												Your browser does not support the audio element.
-											</audio>
-										</div>
-									);
-								case "TEXT":
-									return (
-										<div className="flex w-full items-center justify-center rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg py-16">
-											<FileText className="text-muted-foreground h-16 w-16" />
-										</div>
-									);
-								case "DOCUMENT":
-									return (
-										<div className="flex w-full h-full min-h-[400px] items-center justify-center rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg">
-											<File className="text-muted-foreground h-24 w-24" />
-										</div>
-									);
-								case "ARCHIVE":
-									return (
-										<div className="flex w-full h-full min-h-[400px] items-center justify-center rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg">
-											<Archive className="text-muted-foreground h-24 w-24" />
-										</div>
-									);
-								case "IMAGE":
-								default:
-									return (
-										<div className="relative w-full h-full">
-											<Image
-												src={fileUrl}
-												alt={filename}
-												fill
-												className="object-contain rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg"
-												priority
-												sizes="(max-width: 1024px) 100vw, 60vw"
-											/>
-										</div>
-									);
-							}
-						})()}
-					</div>
-					<CardContent className="p-6 w-full lg:w-2/5 flex flex-col justify-between">
-						<div className="mb-6">
-							<h1 className="text-foreground text-lg font-semibold break-all mb-6">
-								{filename}
-							</h1>
-						</div>
-
-						<div className="flex flex-col gap-4 mb-6">
-							<div className="space-y-3">
-								<div>
-									<h3 className="text-foreground text-xs font-medium mb-1.5">
-										Type
-									</h3>
-									<p className="text-muted-foreground text-sm font-normal">
-										{fileType}
-									</p>
-								</div>
-								<div>
-									<h3 className="text-foreground text-xs font-medium mb-1.5">
-										Size
-									</h3>
-									<p className="text-muted-foreground text-sm font-normal">
-										{formatBytes(filesize)}
-									</p>
-								</div>
-								<div>
-									<h3 className="text-foreground text-xs font-medium mb-1.5">
-										Uploaded
-									</h3>
-									<p className="text-muted-foreground text-sm font-normal">
-										{formatDate(uploadAt)}
-									</p>
-								</div>
-								<div>
-									<h3 className="text-foreground text-xs font-medium mb-1.5">
-										Expires
-									</h3>
-									<p className="text-muted-foreground text-sm font-normal">
-										{formatDate(expiresAt)}
-									</p>
-								</div>
+		<div className="min-h-screen flex items-center justify-center py-4 px-2 sm:px-4 md:px-8">
+			<ContextMenu onOpenChange={setMenuOpen}>
+				<ContextMenuTrigger
+					ref={triggerRef}
+					className="w-full max-w-[80vw] lg:max-w-[70vw]"
+				>
+					<div className="relative border border-input rounded-xl overflow-hidden hover:border-ring/50 duration-500">
+						{fileType === "IMAGE" && imageDimensions && (
+							<Image
+								src={fileUrl}
+								alt={filename}
+								width={imageDimensions.width}
+								height={imageDimensions.height}
+								className="object-contain w-full h-auto max-h-[60vh] sm:max-h-[70vh] lg:max-h-[80vh] rounded-xl"
+								priority
+							/>
+						)}
+						{fileType === "VIDEO" && (
+							<div className="w-full aspect-video max-h-[60vh] sm:max-h-[70vh] lg:max-h-[80vh]">
+								<MediaPlayer
+									src={fileUrl}
+									title={filename}
+									crossOrigin="anonymous"
+									playsInline
+									controls={false}
+									className="w-full h-full"
+								>
+									<MediaProvider />
+									<DefaultVideoLayout
+										icons={customIcons}
+										colorScheme="dark"
+										slots={{
+											googleCastButton: null,
+											airPlayButton: null,
+											captionButton: null,
+											timeSlider: (
+												<TimeSlider.Root className="vds-time-slider vds-slider">
+													<TimeSlider.Track className="vds-slider-track" />
+													<TimeSlider.TrackFill className="vds-slider-track-fill vds-slider-track" />
+													<TimeSlider.Progress className="vds-slider-progress vds-slider-track" />
+													<TimeSlider.Thumb className="vds-slider-thumb" />
+												</TimeSlider.Root>
+											),
+										}}
+									/>
+								</MediaPlayer>
 							</div>
-						</div>
+						)}
+					</div>
+				</ContextMenuTrigger>
 
-						<div className="flex flex-col gap-2 mt-auto">
-							<Button onClick={handleDownload} size="sm" className="w-full">
-								<Download className="h-4 w-4 mr-2" />
-								Download
-							</Button>
-						</div>
-					</CardContent>
-				</div>
-			</Card>
+				<ContextMenuContent className="w-64">
+					<ContextMenuItem onClick={handleDownload}>
+						<Download className="mr-2 h-4 w-4" />
+						Download
+					</ContextMenuItem>
+					<ContextMenuSeparator />
+					<ContextMenuItem disabled>Name: {filename}</ContextMenuItem>
+					<ContextMenuItem disabled>
+						Size: {formatBytes(filesize)}
+					</ContextMenuItem>
+					<ContextMenuItem disabled>
+						Uploaded: {formatDate(uploadAt)}
+					</ContextMenuItem>
+					<ContextMenuItem disabled>
+						Expires: {formatDate(expiresAt)}
+					</ContextMenuItem>
+				</ContextMenuContent>
+			</ContextMenu>
 		</div>
 	);
 }

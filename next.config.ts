@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
 	env: {
 		R2_PUBLIC_BASE_URL: process.env.R2_PUBLIC_BASE_URL,
 	},
-	allowedDevOrigins: ["basket-brother-fishing-rss.trycloudflare.com"],
+	allowedDevOrigins: ["highlights-ridge-contributions-rugs.trycloudflare.com"],
 	images: {
 		remotePatterns: [
 			{

@@ -20,6 +20,7 @@ import {
 } from "@/lib/validation";
 import { generateSlug, generateUploadId } from "@/lib/utils";
 import { getMediaDimensions, isMediaType } from "@/lib/media";
+import { ThumbnailService } from "@/lib/thumbnail";
 import {
 	EXPIRES_MAP,
 	DIRECT_UPLOAD_LIMIT,
@@ -67,6 +68,7 @@ export async function getUploadInfo(
 	const record = await prisma.upload.findUnique({
 		where: { slug },
 		select: {
+			id: true,
 			slug: true,
 			filename: true,
 			domain: true,
@@ -74,6 +76,9 @@ export async function getUploadInfo(
 			mimeType: true,
 			filesize: true,
 			uploadAt: true,
+			thumbnail: true,
+			width: true,
+			height: true,
 		},
 	});
 
@@ -305,12 +310,35 @@ export async function directUpload(
 
 	let width: number | undefined;
 	let height: number | undefined;
+	let thumbnailPath: string | undefined;
 
 	if (isMediaType(mimeType)) {
 		const dimensions = await getMediaDimensions(buffer, mimeType);
 		if (dimensions) {
 			width = dimensions.width;
 			height = dimensions.height;
+		}
+
+		if (mimeType.startsWith("video/")) {
+			try {
+				const thumbnailResult = await ThumbnailService.generateVideoThumbnail(
+					buffer,
+					mimeType,
+					slug,
+					sanitizedFilename,
+				);
+
+				if (thumbnailResult) {
+					thumbnailPath = ThumbnailService.getThumbnailKey(
+						slug,
+						sanitizedFilename,
+					);
+					width = thumbnailResult.width;
+					height = thumbnailResult.height;
+				}
+			} catch (thumbnailError) {
+				console.error("Error generating thumbnail:", thumbnailError);
+			}
 		}
 	}
 
@@ -327,11 +355,15 @@ export async function directUpload(
 			domain: domain || "",
 			width,
 			height,
+			thumbnail: thumbnailPath,
 			expiresAt,
 		},
 	});
 
 	const url = getPublicUrl(slug, sanitizedFilename, domain || undefined);
+	const thumbnailUrl = thumbnailPath
+		? ThumbnailService.getThumbnailUrl(slug, sanitizedFilename, domain)
+		: undefined;
 
 	const response: UploadResponse = {
 		id: upload.id,
@@ -340,6 +372,7 @@ export async function directUpload(
 		expiresAt: upload.expiresAt.toISOString(),
 		width: upload.width ?? undefined,
 		height: upload.height ?? undefined,
+		thumbnail: thumbnailUrl,
 	};
 
 	return {
@@ -493,6 +526,7 @@ export async function completeUpload(
 
 	let width: number | undefined;
 	let height: number | undefined;
+	let thumbnailPath: string | undefined;
 
 	if (isMediaType(body.mimeType)) {
 		try {
@@ -504,6 +538,29 @@ export async function completeUpload(
 				if (dimensions) {
 					width = dimensions.width;
 					height = dimensions.height;
+				}
+
+				if (body.mimeType.startsWith("video/")) {
+					try {
+						const thumbnailResult =
+							await ThumbnailService.generateVideoThumbnail(
+								buffer,
+								body.mimeType,
+								body.slug,
+								sanitizedFilename,
+							);
+
+						if (thumbnailResult) {
+							thumbnailPath = ThumbnailService.getThumbnailKey(
+								body.slug,
+								sanitizedFilename,
+							);
+							width = thumbnailResult.width;
+							height = thumbnailResult.height;
+						}
+					} catch (thumbnailError) {
+						console.error("Error generating thumbnail:", thumbnailError);
+					}
 				}
 			}
 		} catch (dimensionError) {
@@ -522,6 +579,7 @@ export async function completeUpload(
 			domain: body.domain || "",
 			width,
 			height,
+			thumbnail: thumbnailPath,
 			expiresAt,
 		},
 	});
@@ -532,6 +590,14 @@ export async function completeUpload(
 		body.domain || undefined,
 	);
 
+	const thumbnailUrl = thumbnailPath
+		? ThumbnailService.getThumbnailUrl(
+				body.slug,
+				sanitizedFilename,
+				body.domain,
+			)
+		: undefined;
+
 	const response: UploadResponse = {
 		id: upload.id,
 		slug: upload.slug,
@@ -539,6 +605,7 @@ export async function completeUpload(
 		expiresAt: upload.expiresAt.toISOString(),
 		width: upload.width ?? undefined,
 		height: upload.height ?? undefined,
+		thumbnail: thumbnailUrl,
 	};
 
 	return {

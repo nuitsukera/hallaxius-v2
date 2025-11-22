@@ -1,6 +1,6 @@
 {
 	"name": "hallaxius-v2",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"private": true,
 	"scripts": {
 		"dev": "next dev --turbopack",
@@ -16,6 +16,8 @@
 		"db:studio": "prisma studio"
 	},
 	"dependencies": {
+		"@ffmpeg/ffmpeg": "^0.12.15",
+		"@ffmpeg/util": "^0.12.2",
 		"@neondatabase/serverless": "^1.0.2",
 		"@opennextjs/aws": "^3.8.5",
 		"@opennextjs/cloudflare": "^1.11.1",
@@ -32,12 +34,12 @@
 		"@radix-ui/react-slot": "^1.2.4",
 		"@radix-ui/react-switch": "^1.2.6",
 		"@radix-ui/react-tabs": "^1.1.13",
-		"@sapphire/snowflake": "^3.5.5",
-		"@vidstack/player": "^0.13.3",
-		"@vidstack/player-react": "^1.6.0",
+		"@vidstack/react": "^1.12.13",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"dotenv": "^17.2.3",
+		"ffmpeg-static": "^5.3.0",
+		"fluent-ffmpeg": "^2.1.3",
 		"framer-motion": "^12.23.24",
 		"lucide-react": "^0.553.0",
 		"nanoid": "^5.1.6",
@@ -47,7 +49,8 @@
 		"react-dom": "19.1.0",
 		"sonner": "^2.0.7",
 		"tailwind-merge": "^3.3.1",
-		"uuid": "^13.0.0"
+		"uuid": "^13.0.0",
+		"vidstack": "^1.12.13"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.4",

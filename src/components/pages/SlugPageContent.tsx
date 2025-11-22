@@ -13,8 +13,12 @@ import type {
 import { AnimatePresence } from "framer-motion";
 import { FadeInUp, StaggerContainer } from "../animations";
 
+interface UploadRecordWithId extends UploadRecord {
+	id: string;
+}
+
 export function SlugPageContent({ params }: SlugPageContentProps) {
-	const [record, setRecord] = useState<UploadRecord | null>(null);
+	const [record, setRecord] = useState<UploadRecordWithId | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 
@@ -30,7 +34,8 @@ export function SlugPageContent({ params }: SlugPageContentProps) {
 				}
 
 				const response = await fetch(`/api/upload/${slug}`);
-				const data: ApiResponse = await response.json();
+				const data: ApiResponse & { record?: UploadRecordWithId } =
+					await response.json();
 
 				if (!response.ok || !data.success) {
 					setError(data.error || "This file does not exist or has expired.");
@@ -80,12 +85,14 @@ export function SlugPageContent({ params }: SlugPageContentProps) {
 							<StaggerContainer className="flex-1 overflow-hidden">
 								<FadeInUp className="h-full">
 									<FileViewPage
+										slug={record.slug}
 										filename={record.filename}
 										fileUrl={getFileUrl(record.slug, record.filename)}
 										mimeType={record.mimeType}
 										filesize={record.filesize || 0}
 										uploadAt={new Date(record.uploadAt)}
 										expiresAt={new Date(record.expiresAt || new Date())}
+										uploadId={record.id}
 									/>
 								</FadeInUp>
 							</StaggerContainer>

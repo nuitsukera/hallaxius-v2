@@ -3,53 +3,61 @@ import { getFileUrl } from "@/lib/url";
 import { prisma } from "@/lib/prisma";
 
 export const baseMetadata: Metadata = {
+	metadataBase: new URL("https://hallaxi.us"),
 	icons: {
 		icon: "/favicon.webp",
 		shortcut: "/favicon.webp",
 	},
 };
 
-export const routeMetadata: Record<string, Metadata> = {
-	"/": {
+export const homeMetadata: Metadata = {
+	...baseMetadata,
+	title: "Hallaxius",
+	description:
+		"Easily share screenshots, video clips, project files, and more. Send up to 512 MB quickly and securely.",
+	openGraph: {
 		title: "Hallaxius",
 		description:
 			"Easily share screenshots, video clips, project files, and more. Send up to 512 MB quickly and securely.",
-		openGraph: {
-			title: "Hallaxius",
-			description:
-				"Easily share screenshots, video clips, project files, and more. Send up to 512 MB quickly and securely.",
-			type: "website",
-			images: [
-				{
-					url: "https://hallaxi.us/favicon.webp",
-					width: 128,
-					height: 128,
-					alt: "Hallaxius Logo",
-				},
-			],
-		},
-		twitter: {
-			card: "summary",
-			title: "Hallaxius",
-			description:
-				"Easily share screenshots, video clips, project files, and more. Send up to 512 MB quickly and securely.",
-			images: ["https://hallaxi.us/favicon.webp"],
-		},
+		type: "website",
+		images: [
+			{
+				url: "/favicon.webp",
+				width: 128,
+				height: 128,
+				alt: "Hallaxius Logo",
+			},
+		],
 	},
-	"/_not-found": {
-		title: "Not Found - Hallaxius",
-		description: "The page you are looking for does not exist.",
+	twitter: {
+		card: "summary",
+		title: "Hallaxius",
+		description:
+			"Easily share screenshots, video clips, project files, and more. Send up to 512 MB quickly and securely.",
+		images: ["/favicon.webp"],
+	},
+	robots: {
+		index: true,
+		follow: true,
+	},
+};
+
+export const notFoundMetadata: Metadata = {
+	...baseMetadata,
+	title: "Not Found - Hallaxius",
+	robots: {
+		index: false,
+		follow: false,
 	},
 };
 
 export function getStaticMetadataForRoute(route: string): Metadata {
-	const routeMeta = routeMetadata[route];
+	if (route === "/") {
+		return homeMetadata;
+	}
 
-	if (routeMeta) {
-		return {
-			...baseMetadata,
-			...routeMeta,
-		};
+	if (route === "/_not-found") {
+		return notFoundMetadata;
 	}
 
 	return baseMetadata;
@@ -61,38 +69,77 @@ function getFileType(mimeType: string): "VIDEO" | "IMAGE" | "OTHER" {
 	return "OTHER";
 }
 
+function getOptimizedDimensions(
+	width: number,
+	height: number,
+): { width: number; height: number } {
+	const aspectRatio = width / height;
+	const maxWidth = 1200;
+	const maxHeight = 630;
+
+	if (aspectRatio > 1.91) {
+		return { width: maxWidth, height: Math.round(maxWidth / aspectRatio) };
+	} else if (aspectRatio < 1.27) {
+		return { width: Math.round(maxHeight * aspectRatio), height: maxHeight };
+	}
+
+	if (width > maxWidth || height > maxHeight) {
+		const scale = Math.min(maxWidth / width, maxHeight / height);
+		return {
+			width: Math.round(width * scale),
+			height: Math.round(height * scale),
+		};
+	}
+
+	return { width, height };
+}
+
 export function generateFileMetadata(slug: string, record: any): Metadata {
 	const fileUrl = getFileUrl(slug, record.filename);
 	const fileType = getFileType(record.mimeType);
 
-	const dimensions = {
+	const originalDimensions = {
 		width: typeof record.width === "number" ? record.width : 1280,
 		height: typeof record.height === "number" ? record.height : 720,
 	};
 
+	const optimizedDimensions = getOptimizedDimensions(
+		originalDimensions.width,
+		originalDimensions.height,
+	);
+
+	const baseMeta = {
+		...baseMetadata,
+		title: record.filename,
+		description: undefined,
+		robots: {
+			index: false,
+			follow: false,
+		},
+	};
+
 	if (fileType === "VIDEO") {
 		return {
-			title: record.filename,
+			...baseMeta,
 			openGraph: {
 				title: record.filename,
+				description: undefined,
 				type: "video.other",
 				url: fileUrl,
 				videos: [
 					{
 						url: fileUrl,
-						width: dimensions.width,
-						height: dimensions.height,
+						width: originalDimensions.width,
+						height: originalDimensions.height,
 						type: record.mimeType,
 					},
 				],
 				images: [
 					{
-						url: fileUrl + "?thumb=1",
-						width: dimensions.width,
-						height: dimensions.height,
-						alt: record.filename
-							? `${record.filename} thumbnail`
-							: "Video thumbnail",
+						url: `${fileUrl}?thumb=1`,
+						width: optimizedDimensions.width,
+						height: optimizedDimensions.height,
+						alt: record.filename,
 						type: "image/jpeg",
 					},
 				],
@@ -100,13 +147,14 @@ export function generateFileMetadata(slug: string, record: any): Metadata {
 			twitter: {
 				card: "player",
 				title: record.filename,
-				images: [fileUrl + "?thumb=1"],
+				description: undefined,
+				images: [`${fileUrl}?thumb=1`],
 				players: [
 					{
 						playerUrl: fileUrl,
 						streamUrl: fileUrl,
-						width: dimensions.width,
-						height: dimensions.height,
+						width: originalDimensions.width,
+						height: originalDimensions.height,
 					},
 				],
 			},
@@ -115,38 +163,43 @@ export function generateFileMetadata(slug: string, record: any): Metadata {
 
 	if (fileType === "IMAGE") {
 		return {
-			title: record.filename,
+			...baseMeta,
 			openGraph: {
 				title: record.filename,
+				description: undefined,
 				type: "website",
 				url: fileUrl,
 				images: [
 					{
 						url: fileUrl,
-						width: dimensions.width,
-						height: dimensions.height,
+						width: optimizedDimensions.width,
+						height: optimizedDimensions.height,
 						alt: record.filename,
-						type: "image/jpeg",
+						type: record.mimeType || "image/jpeg",
 					},
 				],
 			},
 			twitter: {
 				card: "summary_large_image",
 				title: record.filename,
+				description: undefined,
 				images: [fileUrl],
 			},
 		};
 	}
 
 	return {
-		title: record.filename,
+		...baseMeta,
 		openGraph: {
 			title: record.filename,
+			description: undefined,
 			type: "website",
 			url: fileUrl,
 		},
 		twitter: {
 			card: "summary",
+			title: record.filename,
+			description: undefined,
 		},
 	};
 }
@@ -164,38 +217,15 @@ export async function getMetadataForSlug(slug: string): Promise<Metadata> {
 		});
 
 		if (record) {
-			const fileMetadata = generateFileMetadata(slug, record);
-			return {
-				...baseMetadata,
-				...fileMetadata,
-			};
+			return generateFileMetadata(slug, record);
 		}
 
-		return {
-			...baseMetadata,
-			title: "File not found",
-		};
+		return notFoundMetadata;
 	} catch (error) {
 		console.error("Error fetching metadata for slug:", slug, error);
 		return {
 			...baseMetadata,
-			title: "Error",
+			title: "Error - Hallaxius",
 		};
 	}
-}
-
-export async function getMetadataForRoute(pathname: string): Promise<Metadata> {
-	if (pathname.startsWith("/") && pathname !== "/") {
-		const slug = pathname.substring(1);
-		return getMetadataForSlug(slug);
-	}
-
-	const routeMeta = routeMetadata[pathname];
-	if (routeMeta) {
-		return {
-			...baseMetadata,
-			...routeMeta,
-		};
-	}
-	return baseMetadata;
 }

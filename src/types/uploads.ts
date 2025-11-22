@@ -64,6 +64,7 @@ export interface UploadResponse {
 	expiresAt: string;
 	width?: number;
 	height?: number;
+	thumbnail?: string;
 }
 
 export interface ErrorResponse {
@@ -89,6 +90,9 @@ export interface UploadRecord {
 	mimeType: string;
 	filesize: number | null;
 	uploadAt: string;
+	thumbnail?: string | null;
+	width?: number | null;
+	height?: number | null;
 }
 
 export interface ApiResponse {

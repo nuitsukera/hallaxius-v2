@@ -43,7 +43,7 @@ export default function UploadPage() {
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const [selectedFile, setSelectedFile] = useState<File | null>(null);
 	const [uploadProgress, setUploadProgress] = useState(0);
-	const [isUploading, setIsUploading] = useState(false);
+	const [_isUploading, setIsUploading] = useState(false);
 	const [uploadUrl, setUploadUrl] = useState("");
 	const [copied, setCopied] = useState(false);
 	const [selectedDomain, setSelectedDomain] = useState("");
@@ -324,7 +324,7 @@ export default function UploadPage() {
 			} else {
 				await handleChunkedUpload(file);
 			}
-		} catch (error) {
+		} catch (_error) {
 		} finally {
 			setTimeout(() => {
 				setShowProgress(false);

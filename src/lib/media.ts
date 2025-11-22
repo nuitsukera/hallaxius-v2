@@ -8,7 +8,7 @@ export async function getImageDimensions(
 	mimeType: string,
 ): Promise<MediaDimensions | null> {
 	try {
-		if (mimeType === "image/png") {
+		if (mimeType === "image/png" || mimeType === "image/apng") {
 			if (buffer.length < 24) return null;
 			const width = buffer.readUInt32BE(16);
 			const height = buffer.readUInt32BE(20);
@@ -95,6 +95,46 @@ export async function getImageDimensions(
 			return { width, height };
 		}
 
+		if (mimeType === "image/tiff") {
+			return parseTiffDimensions(buffer);
+		}
+
+		if (
+			mimeType === "image/ico" ||
+			mimeType === "image/x-icon" ||
+			mimeType === "image/vnd.microsoft.icon"
+		) {
+			return parseIcoDimensions(buffer);
+		}
+
+		if (mimeType === "image/avif") {
+			return parseAvifDimensions(buffer);
+		}
+
+		if (mimeType === "image/heic" || mimeType === "image/heif") {
+			return parseHeifDimensions(buffer);
+		}
+
+		if (
+			mimeType === "image/x-portable-bitmap" ||
+			mimeType === "image/x-portable-graymap" ||
+			mimeType === "image/x-portable-pixmap"
+		) {
+			return parsePnmDimensions(buffer, mimeType);
+		}
+
+		if (
+			mimeType === "image/x-xbitmap" ||
+			mimeType === "image/x-xpixmap" ||
+			mimeType === "image/x-cmu-raster"
+		) {
+			return parseXbmDimensions(buffer, mimeType);
+		}
+
+		if (mimeType === "image/svg+xml") {
+			return parseSvgDimensions(buffer);
+		}
+
 		return null;
 	} catch (error) {
 		console.error("Error extracting image dimensions:", error);
@@ -102,117 +142,43 @@ export async function getImageDimensions(
 	}
 }
 
-export async function getVideoDimensions(
-	buffer: Buffer,
-	mimeType: string,
-): Promise<MediaDimensions | null> {
+function parseTiffDimensions(buffer: Buffer): MediaDimensions | null {
 	try {
-		if (
-			mimeType === "video/mp4" ||
-			mimeType === "video/quicktime" ||
-			mimeType === "video/x-m4v"
-		) {
-			return parseMp4Dimensions(buffer);
-		}
+		if (buffer.length < 8) return null;
 
-		if (mimeType === "video/webm") {
-			return parseWebmDimensions(buffer);
-		}
+		const isLittleEndian = buffer.toString("ascii", 0, 2) === "II";
+		const ifdOffset = isLittleEndian
+			? buffer.readUInt32LE(4)
+			: buffer.readUInt32BE(4);
 
-		if (mimeType === "video/x-msvideo" || mimeType === "video/avi") {
-			return parseAviDimensions(buffer);
-		}
+		if (ifdOffset + 6 > buffer.length) return null;
 
-		return null;
-	} catch (error) {
-		console.error("Error extracting video dimensions:", error);
-		return null;
-	}
-}
+		const entryCount = isLittleEndian
+			? buffer.readUInt16LE(ifdOffset)
+			: buffer.readUInt16BE(ifdOffset);
 
-function parseMp4Dimensions(buffer: Buffer): MediaDimensions | null {
-	try {
-		let offset = 0;
-
-		while (offset < buffer.length - 8) {
-			const boxSize = buffer.readUInt32BE(offset);
-			const boxType = buffer.toString("ascii", offset + 4, offset + 8);
-
-			if (boxSize === 0 || boxSize > buffer.length - offset) break;
-
-			if (boxType === "tkhd") {
-				const version = buffer[offset + 8];
-				let dimensionOffset: number;
-
-				if (version === 1) {
-					dimensionOffset = offset + 88;
-				} else {
-					dimensionOffset = offset + 76;
-				}
-
-				if (dimensionOffset + 8 <= buffer.length) {
-					const width = buffer.readUInt32BE(dimensionOffset) >> 16;
-					const height = buffer.readUInt32BE(dimensionOffset + 4) >> 16;
-
-					if (width > 0 && height > 0) {
-						return { width, height };
-					}
-				}
-			}
-
-			if (
-				boxType === "moov" ||
-				boxType === "trak" ||
-				boxType === "mdia" ||
-				boxType === "minf" ||
-				boxType === "stbl"
-			) {
-				const innerResult = parseMp4Dimensions(
-					buffer.subarray(offset + 8, offset + boxSize),
-				);
-				if (innerResult) return innerResult;
-			}
-
-			offset += boxSize;
-		}
-
-		return null;
-	} catch (error) {
-		console.error("Error parsing MP4 dimensions:", error);
-		return null;
-	}
-}
-
-function parseWebmDimensions(buffer: Buffer): MediaDimensions | null {
-	try {
-		let offset = 0;
 		let width: number | null = null;
 		let height: number | null = null;
 
-		while (offset < buffer.length - 4 && (width === null || height === null)) {
-			const elementId = buffer[offset];
+		for (let i = 0; i < entryCount; i++) {
+			const entryOffset = ifdOffset + 2 + i * 12;
+			if (entryOffset + 12 > buffer.length) break;
 
-			if (elementId === 0xb0) {
-				const size = buffer[offset + 1];
-				if (size <= 8 && offset + 2 + size <= buffer.length) {
-					width = 0;
-					for (let i = 0; i < size; i++) {
-						width = (width << 8) | buffer[offset + 2 + i];
-					}
-				}
+			const tag = isLittleEndian
+				? buffer.readUInt16LE(entryOffset)
+				: buffer.readUInt16BE(entryOffset);
+
+			if (tag === 256) {
+				width = isLittleEndian
+					? buffer.readUInt32LE(entryOffset + 8)
+					: buffer.readUInt32BE(entryOffset + 8);
+			} else if (tag === 257) {
+				height = isLittleEndian
+					? buffer.readUInt32LE(entryOffset + 8)
+					: buffer.readUInt32BE(entryOffset + 8);
 			}
 
-			if (elementId === 0xba) {
-				const size = buffer[offset + 1];
-				if (size <= 8 && offset + 2 + size <= buffer.length) {
-					height = 0;
-					for (let i = 0; i < size; i++) {
-						height = (height << 8) | buffer[offset + 2 + i];
-					}
-				}
-			}
-
-			offset++;
+			if (width !== null && height !== null) break;
 		}
 
 		if (width !== null && height !== null && width > 0 && height > 0) {
@@ -221,46 +187,232 @@ function parseWebmDimensions(buffer: Buffer): MediaDimensions | null {
 
 		return null;
 	} catch (error) {
-		console.error("Error parsing WebM dimensions:", error);
+		console.error("Error parsing TIFF dimensions:", error);
 		return null;
 	}
 }
 
-function parseAviDimensions(buffer: Buffer): MediaDimensions | null {
+function parseIcoDimensions(buffer: Buffer): MediaDimensions | null {
 	try {
-		if (buffer.length < 64) return null;
+		if (buffer.length < 6) return null;
 
-		if (
-			buffer.toString("ascii", 0, 4) !== "RIFF" ||
-			buffer.toString("ascii", 8, 12) !== "AVI "
-		) {
-			return null;
-		}
+		const count = buffer.readUInt16LE(4);
+		if (count === 0) return null;
 
-		let offset = 12;
-		while (offset < buffer.length - 8) {
-			const chunkId = buffer.toString("ascii", offset, offset + 4);
-			const chunkSize = buffer.readUInt32LE(offset + 4);
+		const width = buffer[6] === 0 ? 256 : buffer[6];
+		const height = buffer[7] === 0 ? 256 : buffer[7];
 
-			if (chunkId === "avih") {
-				if (offset + 40 <= buffer.length) {
-					const width = buffer.readUInt32LE(offset + 32);
-					const height = buffer.readUInt32LE(offset + 36);
-
-					if (width > 0 && height > 0) {
-						return { width, height };
-					}
-				}
-				break;
-			}
-
-			offset += 8 + chunkSize + (chunkSize % 2);
-			if (chunkSize === 0) break;
+		if (width > 0 && height > 0) {
+			return { width, height };
 		}
 
 		return null;
 	} catch (error) {
-		console.error("Error parsing AVI dimensions:", error);
+		console.error("Error parsing ICO dimensions:", error);
+		return null;
+	}
+}
+
+function parseAvifDimensions(buffer: Buffer): MediaDimensions | null {
+	try {
+		if (buffer.length < 12) return null;
+
+		let offset = 0;
+		while (offset < buffer.length - 8) {
+			const boxSize = buffer.readUInt32BE(offset);
+			const boxType = buffer.toString("ascii", offset + 4, offset + 8);
+
+			if (boxSize === 0 || boxSize > buffer.length - offset) break;
+
+			if (boxType === "ftyp") {
+				offset += boxSize;
+				continue;
+			}
+
+			if (boxType === "meta") {
+				const metaOffset = offset + 8;
+				return parseHeicMetaBox(buffer, metaOffset, boxSize - 8);
+			}
+
+			offset += boxSize;
+		}
+
+		return null;
+	} catch (error) {
+		console.error("Error parsing AVIF dimensions:", error);
+		return null;
+	}
+}
+
+function parseHeifDimensions(buffer: Buffer): MediaDimensions | null {
+	try {
+		if (buffer.length < 12) return null;
+
+		let offset = 0;
+		while (offset < buffer.length - 8) {
+			const boxSize = buffer.readUInt32BE(offset);
+			const boxType = buffer.toString("ascii", offset + 4, offset + 8);
+
+			if (boxSize === 0 || boxSize > buffer.length - offset) break;
+
+			if (boxType === "ftyp") {
+				offset += boxSize;
+				continue;
+			}
+
+			if (boxType === "meta") {
+				const metaOffset = offset + 8;
+				return parseHeicMetaBox(buffer, metaOffset, boxSize - 8);
+			}
+
+			offset += boxSize;
+		}
+
+		return null;
+	} catch (error) {
+		console.error("Error parsing HEIF dimensions:", error);
+		return null;
+	}
+}
+
+function parseHeicMetaBox(
+	buffer: Buffer,
+	offset: number,
+	size: number,
+): MediaDimensions | null {
+	try {
+		let metaOffset = offset;
+		const endOffset = offset + size;
+
+		while (metaOffset < endOffset - 8) {
+			const boxSize = buffer.readUInt32BE(metaOffset);
+			const boxType = buffer.toString("ascii", metaOffset + 4, metaOffset + 8);
+
+			if (boxSize === 0 || boxSize > endOffset - metaOffset) break;
+
+			if (boxType === "iprp" || boxType === "ipco") {
+				const result = parseHeicMetaBox(buffer, metaOffset + 8, boxSize - 8);
+				if (result) return result;
+			}
+
+			if (boxType === "ispe") {
+				if (metaOffset + 16 <= endOffset) {
+					const width = buffer.readUInt32BE(metaOffset + 8);
+					const height = buffer.readUInt32BE(metaOffset + 12);
+					return { width, height };
+				}
+			}
+
+			metaOffset += boxSize;
+		}
+
+		return null;
+	} catch (error) {
+		console.error("Error parsing HEIC meta box:", error);
+		return null;
+	}
+}
+
+function parsePnmDimensions(
+	buffer: Buffer,
+	mimeType: string,
+): MediaDimensions | null {
+	try {
+		const header = buffer.toString("ascii", 0, Math.min(100, buffer.length));
+		const lines = header
+			.split("\n")
+			.filter((line) => line.trim() && !line.startsWith("#"));
+
+		if (lines.length < 2) return null;
+
+		const magicNumber = lines[0].trim();
+		const dimensions = lines[1].trim().split(/\s+/);
+
+		if (dimensions.length < 2) return null;
+
+		const width = parseInt(dimensions[0]);
+		const height = parseInt(dimensions[1]);
+
+		if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
+			return null;
+		}
+
+		return { width, height };
+	} catch (error) {
+		console.error("Error parsing PNM dimensions:", error);
+		return null;
+	}
+}
+
+function parseXbmDimensions(
+	buffer: Buffer,
+	mimeType: string,
+): MediaDimensions | null {
+	try {
+		const content = buffer.toString("ascii", 0, Math.min(1000, buffer.length));
+
+		const widthMatch =
+			content.match(/#define\s+\S*width\S*\s+(\d+)/i) ||
+			content.match(/\S*width\S*\s*=\s*(\d+)/i);
+		const heightMatch =
+			content.match(/#define\s+\S*height\S*\s+(\d+)/i) ||
+			content.match(/\S*height\S*\s*=\s*(\d+)/i);
+
+		if (widthMatch && heightMatch) {
+			const width = parseInt(widthMatch[1]);
+			const height = parseInt(heightMatch[1]);
+
+			if (width > 0 && height > 0) {
+				return { width, height };
+			}
+		}
+
+		return null;
+	} catch (error) {
+		console.error("Error parsing XBM dimensions:", error);
+		return null;
+	}
+}
+
+function parseSvgDimensions(buffer: Buffer): MediaDimensions | null {
+	try {
+		const content = buffer.toString("utf8", 0, Math.min(2000, buffer.length));
+
+		const widthMatch = content.match(/width\s*=\s*["']?([^"'\s>]+)/i);
+		const heightMatch = content.match(/height\s*=\s*["']?([^"'\s>]+)/i);
+
+		const viewBoxMatch = content.match(/viewBox\s*=\s*["']?\s*([\d.\s-]+)/i);
+
+		let width: number | null = null;
+		let height: number | null = null;
+
+		if (widthMatch && heightMatch) {
+			const widthStr = widthMatch[1];
+			const heightStr = heightMatch[1];
+
+			width = parseFloat(widthStr.replace(/[^\d.-]/g, ""));
+			height = parseFloat(heightStr.replace(/[^\d.-]/g, ""));
+
+			if (width > 0 && height > 0) {
+				return { width: Math.round(width), height: Math.round(height) };
+			}
+		}
+
+		if (viewBoxMatch) {
+			const viewBoxParts = viewBoxMatch[1].trim().split(/\s+/);
+			if (viewBoxParts.length >= 4) {
+				width = parseFloat(viewBoxParts[2]);
+				height = parseFloat(viewBoxParts[3]);
+
+				if (width > 0 && height > 0) {
+					return { width: Math.round(width), height: Math.round(height) };
+				}
+			}
+		}
+
+		return null;
+	} catch (error) {
+		console.error("Error parsing SVG dimensions:", error);
 		return null;
 	}
 }
@@ -273,13 +425,33 @@ export async function getMediaDimensions(
 		return getImageDimensions(buffer, mimeType);
 	}
 
-	if (mimeType.startsWith("video/")) {
-		return getVideoDimensions(buffer, mimeType);
-	}
-
 	return null;
 }
 
 export function isMediaType(mimeType: string): boolean {
-	return mimeType.startsWith("image/") || mimeType.startsWith("video/");
+	const imageTypes = [
+		"image/jpeg",
+		"image/jpg",
+		"image/png",
+		"image/gif",
+		"image/webp",
+		"image/svg+xml",
+		"image/bmp",
+		"image/tiff",
+		"image/ico",
+		"image/x-icon",
+		"image/vnd.microsoft.icon",
+		"image/apng",
+		"image/avif",
+		"image/heic",
+		"image/heif",
+		"image/x-portable-bitmap",
+		"image/x-portable-graymap",
+		"image/x-portable-pixmap",
+		"image/x-xbitmap",
+		"image/x-xpixmap",
+		"image/x-cmu-raster",
+	];
+
+	return imageTypes.includes(mimeType) || mimeType.startsWith("image/");
 }

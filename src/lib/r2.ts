@@ -104,7 +104,7 @@ export async function deleteFromR2(
 
 export function getPublicUrl(
 	slug: string,
-	filename: string,
+	_filename: string,
 	domain?: string,
 ): string {
 	const baseUrl = domain ? `https://${domain}` : process.env.R2_PUBLIC_BASE_URL;

@@ -19,6 +19,7 @@ export async function executeCleanup(bucket: R2Bucket): Promise<{
 				id: true,
 				slug: true,
 				filename: true,
+				thumbnail: true,
 			},
 		});
 
@@ -37,10 +38,21 @@ export async function executeCleanup(bucket: R2Bucket): Promise<{
 
 		const results = await Promise.allSettled(
 			expiredUploads.map(
-				async (upload: { id: string; slug: string; filename: string }) => {
+				async (upload: {
+					id: string;
+					slug: string;
+					filename: string;
+					thumbnail: string | null;
+				}) => {
 					try {
 						const key = `${upload.slug}/${upload.filename}`;
 						await deleteFromR2(bucket, key);
+
+						if (upload.thumbnail) {
+							await deleteFromR2(bucket, upload.thumbnail);
+						}
+
+						await cleanupTempFiles(bucket, upload.slug);
 
 						await prisma.upload.delete({
 							where: { id: upload.id },
@@ -75,5 +87,31 @@ export async function executeCleanup(bucket: R2Bucket): Promise<{
 	} catch (error) {
 		console.error("Error during cleanup cron:", error);
 		throw new Error(error instanceof Error ? error.message : "Unknown error");
+	}
+}
+
+async function cleanupTempFiles(bucket: R2Bucket, slug: string): Promise<void> {
+	try {
+		const tempObjects = await bucket.list({ prefix: `${slug}/temp/` });
+
+		if (tempObjects.objects && tempObjects.objects.length > 0) {
+			const deletePromises = tempObjects.objects.map((obj) =>
+				bucket.delete(obj.key),
+			);
+			await Promise.all(deletePromises);
+		}
+
+		const thumbnailObjects = await bucket.list({
+			prefix: `${slug}/thumbnail/`,
+		});
+
+		if (thumbnailObjects.objects && thumbnailObjects.objects.length > 0) {
+			const deletePromises = thumbnailObjects.objects.map((obj) =>
+				bucket.delete(obj.key),
+			);
+			await Promise.all(deletePromises);
+		}
+	} catch (error) {
+		console.error("Error cleaning up temp files:", error);
 	}
 }

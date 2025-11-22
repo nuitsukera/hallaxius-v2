@@ -8,7 +8,7 @@ datasource db {
 }
 
 model Upload {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   slug      String   @unique @db.VarChar(6)
   filename  String
   filesize  Int
@@ -16,6 +16,7 @@ model Upload {
   domain    String
   width     Int?
   height    Int?
+  thumbnail String?
   uploadAt  DateTime @default(now())
   expiresAt DateTime
 
@@ -25,7 +26,7 @@ model Upload {
 }
 
 model Domain {
-  id        String  @id @default(cuid())
+  id        String  @id @default(uuid())
   domain    String  @unique
   subdomain String?
 
