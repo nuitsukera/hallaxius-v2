@@ -28,7 +28,7 @@ function formatBytes(bytes: number): string {
 	const k = 1024;
 	const sizes = ["Bytes", "KB", "MB", "GB"];
 	const i = Math.floor(Math.log(bytes) / Math.log(k));
-	const size = bytes / Math.pow(k, i);
+	const size = bytes / k ** i;
 	const formattedSize = size % 1 === 0 ? size.toString() : size.toFixed(1);
 	return `${formattedSize} ${sizes[i]}`;
 }
@@ -160,7 +160,14 @@ export default function FileViewPage({
 											className="w-full h-auto rounded-tl-lg lg:rounded-bl-lg lg:rounded-tr-none rounded-tr-lg"
 											autoPlay
 											playsInline
-										/>
+										>
+											<track
+												kind="captions"
+												srcLang="en"
+												label="English"
+												src=""
+											/>
+										</video>
 									);
 								case "AUDIO":
 									return (
@@ -168,6 +175,12 @@ export default function FileViewPage({
 											<Music className="text-muted-foreground h-16 w-16" />
 											<audio controls className="w-3/4">
 												<source src={fileUrl} type={mimeType} />
+												<track
+													kind="captions"
+													srcLang="en"
+													label="English"
+													src=""
+												/>
 												Your browser does not support the audio element.
 											</audio>
 										</div>

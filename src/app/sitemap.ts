@@ -5,7 +5,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 		{
 			url: "https://hallaxi.us",
 			lastModified: new Date(),
-			changeFrequency: "monthly",
+			changeFrequency: "hourly",
 			priority: 1,
 		},
 	];

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getUploadInfo } from "@/lib/api/uploads";
 
 export async function GET(
 	request: NextRequest,
@@ -8,60 +8,24 @@ export async function GET(
 ) {
 	try {
 		const { slug } = await context.params;
+		const currentDomain = request.headers.get("host") || undefined;
 
-		if (!slug || typeof slug !== "string") {
+		const result = await getUploadInfo({ slug, currentDomain });
+
+		if (!result.success) {
 			return NextResponse.json(
-				{ success: false, error: "Invalid slug" },
-				{ status: 400 },
+				{ success: false, error: result.error },
+				{ status: result.status },
 			);
 		}
 
-		const record = await prisma.upload.findUnique({
-			where: { slug },
-			select: {
-				slug: true,
-				filename: true,
-				domain: true,
-				expiresAt: true,
-				mimeType: true,
-				filesize: true,
-				uploadAt: true,
+		return NextResponse.json(
+			{
+				success: true,
+				record: result.data,
 			},
-		});
-
-		if (!record) {
-			return NextResponse.json(
-				{ success: false, error: "This file does not exist or has expired." },
-				{ status: 404 },
-			);
-		}
-
-		const isExpired =
-			record.expiresAt && new Date(record.expiresAt) < new Date();
-		if (isExpired) {
-			return NextResponse.json(
-				{ success: false, error: "This file does not exist or has expired." },
-				{ status: 404 },
-			);
-		}
-
-		const currentDomain = request.headers.get("host");
-		if (record.domain && currentDomain) {
-			const recordDomain = record.domain.toLowerCase();
-			const requestDomain = currentDomain.toLowerCase();
-
-			if (recordDomain !== requestDomain) {
-				return NextResponse.json(
-					{ success: false, error: "This file does not exist or has expired." },
-					{ status: 404 },
-				);
-			}
-		}
-
-		return NextResponse.json({
-			success: true,
-			record,
-		});
+			{ status: result.status },
+		);
 	} catch (error) {
 		console.error("API Error:", error);
 

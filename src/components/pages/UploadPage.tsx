@@ -28,15 +28,13 @@ import type {
 } from "@/types/uploads";
 import { CHUNK_SIZE, DIRECT_UPLOAD_LIMIT } from "@/types/uploads";
 import { getDomains, refreshDomains } from "@/lib/domains";
-import { getWebhook } from "@/lib/settings";
-import { sendWebhookNotification } from "@/lib/webhook";
 
 const formatBytes = (bytes: number): string => {
 	if (bytes === 0) return "0 Bytes";
 	const k = 1024;
 	const sizes = ["Bytes", "KB", "MB", "GB"];
 	const i = Math.floor(Math.log(bytes) / Math.log(k));
-	const size = bytes / Math.pow(k, i);
+	const size = bytes / k ** i;
 	const formattedSize = size % 1 === 0 ? size.toString() : size.toFixed(1);
 	return `${formattedSize} ${sizes[i]}`;
 };
@@ -49,7 +47,7 @@ export default function UploadPage() {
 	const [uploadUrl, setUploadUrl] = useState("");
 	const [copied, setCopied] = useState(false);
 	const [selectedDomain, setSelectedDomain] = useState("");
-	const [selectedExpires, setSelectedExpires] = useState<ExpiresOption>("1d");
+	const [selectedExpires, setSelectedExpires] = useState<ExpiresOption>("7d");
 	const [domains, setDomains] = useState<DomainOption[]>([]);
 	const [isLoadingDomains, setIsLoadingDomains] = useState(true);
 	const [isRefreshingDomains, setIsRefreshingDomains] = useState(false);
@@ -60,13 +58,27 @@ export default function UploadPage() {
 		const loadDomains = async () => {
 			try {
 				const data = await getDomains();
-				setDomains(data);
-				if (data.length > 0 && !selectedDomain) {
-					const hallaxiusDomain = data.find((d) => d.value === "hallaxi.us");
+
+				const reorderedDomains = [...data];
+				const hallaxiusIndex = reorderedDomains.findIndex(
+					(d) => d.value === "hallaxi.us",
+				);
+
+				if (hallaxiusIndex > 0) {
+					const [hallaxiusDomain] = reorderedDomains.splice(hallaxiusIndex, 1);
+					reorderedDomains.unshift(hallaxiusDomain);
+				}
+
+				setDomains(reorderedDomains);
+
+				if (reorderedDomains.length > 0 && !selectedDomain) {
+					const hallaxiusDomain = reorderedDomains.find(
+						(d) => d.value === "hallaxi.us",
+					);
 					if (hallaxiusDomain) {
 						setSelectedDomain(hallaxiusDomain.value);
 					} else {
-						setSelectedDomain(data[0].value);
+						setSelectedDomain(reorderedDomains[0].value);
 					}
 				}
 			} catch (error) {
@@ -92,16 +104,17 @@ export default function UploadPage() {
 				expires: selectedExpires,
 			});
 
-			const params = new URLSearchParams({
-				filename: file.name,
-				filesize: file.size.toString(),
-				mimeType: file.type,
-				domain: selectedDomain || "",
-				expires: selectedExpires,
-			});
-
-			const response = await fetch(`/api/upload/direct?${params}`, {
+			const response = await fetch("/api/upload", {
 				method: "POST",
+				headers: {
+					"Content-Type": "application/octet-stream",
+					"x-upload-action": "direct",
+					"x-filename": file.name,
+					"x-mime-type": file.type,
+					"x-filesize": file.size.toString(),
+					"x-domain": selectedDomain || "",
+					"x-expires": selectedExpires,
+				},
 				body: file,
 			});
 
@@ -113,16 +126,6 @@ export default function UploadPage() {
 			const result: UploadResponse = await response.json();
 			setUploadUrl(result.url);
 			setSelectedFile(null);
-
-			const webhookUrl = getWebhook();
-			if (webhookUrl) {
-				await sendWebhookNotification(
-					result.url,
-					file.name,
-					file.size,
-					result.slug,
-				);
-			}
 
 			toast.success("Upload complete!", {
 				description: `File uploaded successfully`,
@@ -147,10 +150,11 @@ export default function UploadPage() {
 				expires: selectedExpires,
 			});
 
-			const startResponse = await fetch("/api/upload/start", {
+			const startResponse = await fetch("/api/upload", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
+					action: "start",
 					filename: file.name,
 					filesize: file.size,
 					mimeType: file.type,
@@ -186,19 +190,17 @@ export default function UploadPage() {
 
 				while (retryCount < maxRetries) {
 					try {
-						const chunkParams = new URLSearchParams({
-							uploadId,
-							chunkIndex: chunkIndex.toString(),
-							totalChunks: totalChunks.toString(),
-						});
-
-						const chunkResponse = await fetch(
-							`/api/upload/chunk?${chunkParams}`,
-							{
-								method: "POST",
-								body: chunk,
+						const chunkResponse = await fetch("/api/upload", {
+							method: "POST",
+							headers: {
+								"Content-Type": "application/octet-stream",
+								"x-upload-action": "chunk",
+								"x-upload-id": uploadId,
+								"x-chunk-index": chunkIndex.toString(),
+								"x-total-chunks": totalChunks.toString(),
 							},
-						);
+							body: chunk,
+						});
 
 						if (!chunkResponse.ok) {
 							throw new Error(`Failed to upload chunk ${chunkIndex}`);
@@ -227,7 +229,7 @@ export default function UploadPage() {
 							);
 						}
 						await new Promise((resolve) =>
-							setTimeout(resolve, 2000 * Math.pow(2, retryCount - 1)),
+							setTimeout(resolve, 2000 * 2 ** (retryCount - 1)),
 						);
 					}
 				}
@@ -271,10 +273,11 @@ export default function UploadPage() {
 				uploadedPartsCount: uploadedParts.length,
 			});
 
-			const completeResponse = await fetch("/api/upload/complete", {
+			const completeResponse = await fetch("/api/upload", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
+					action: "complete",
 					uploadId,
 					slug,
 					filename: file.name,
@@ -295,16 +298,6 @@ export default function UploadPage() {
 			const result: UploadResponse = await completeResponse.json();
 			setUploadUrl(result.url);
 			setSelectedFile(null);
-
-			const webhookUrl = getWebhook();
-			if (webhookUrl) {
-				await sendWebhookNotification(
-					result.url,
-					file.name,
-					file.size,
-					result.slug,
-				);
-			}
 
 			toast.success("Upload complete!", {
 				description: `File uploaded successfully`,
@@ -333,10 +326,8 @@ export default function UploadPage() {
 			}
 		} catch (error) {
 		} finally {
-			// Espera um pouco para garantir que a progress bar mostre 100%
 			setTimeout(() => {
 				setShowProgress(false);
-				// Só mostra o input do URL após a progress bar desaparecer
 				setTimeout(() => {
 					setIsUploading(false);
 				}, 300);
@@ -401,13 +392,34 @@ export default function UploadPage() {
 
 		try {
 			const data = await refreshDomains();
-			setDomains(data);
-			const selectedStillExists = data.some((d) => d.value === selectedDomain);
-			if (!selectedStillExists && data.length > 0) {
-				setSelectedDomain(data[0].value);
+
+			const reorderedDomains = [...data];
+			const hallaxiusIndex = reorderedDomains.findIndex(
+				(d) => d.value === "hallaxi.us",
+			);
+
+			if (hallaxiusIndex > 0) {
+				const [hallaxiusDomain] = reorderedDomains.splice(hallaxiusIndex, 1);
+				reorderedDomains.unshift(hallaxiusDomain);
+			}
+
+			setDomains(reorderedDomains);
+
+			const selectedStillExists = reorderedDomains.some(
+				(d) => d.value === selectedDomain,
+			);
+			if (!selectedStillExists && reorderedDomains.length > 0) {
+				const hallaxiusDomain = reorderedDomains.find(
+					(d) => d.value === "hallaxi.us",
+				);
+				if (hallaxiusDomain) {
+					setSelectedDomain(hallaxiusDomain.value);
+				} else {
+					setSelectedDomain(reorderedDomains[0].value);
+				}
 			}
 			toast.success("Domains refreshed!", {
-				description: `Found ${data.length} domain${data.length !== 1 ? "s" : ""}`,
+				description: `Found ${reorderedDomains.length} domain${reorderedDomains.length !== 1 ? "s" : ""}`,
 			});
 			setRefreshSuccess(true);
 			setTimeout(() => {

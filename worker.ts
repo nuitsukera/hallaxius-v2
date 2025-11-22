@@ -1,14 +1,9 @@
-// @ts-ignore `.open-next/worker.ts` is generated at build time
+// @ts-expect-error `.open-next/worker.ts` is generated at build time
 import { default as handler } from "./.open-next/worker.js";
 
 export default {
 	fetch: handler.fetch,
 
-	/**
-	 * Scheduled Handler for cron triggers
-	 *
-	 * Handles the cleanup of expired uploads every hour
-	 */
 	async scheduled(
 		controller: ScheduledController,
 		env: CloudflareEnv,
@@ -44,12 +39,12 @@ export default {
 					console.log("Cron clear executed successfully:", data);
 				} catch (error) {
 					console.error("Error executing cron clear:", error);
-					throw error; // Re-throw to trigger retry
+					throw error;
 				}
 			})(),
 		);
 	},
 } satisfies ExportedHandler<CloudflareEnv>;
 
-// @ts-ignore `.open-next/worker.ts` is generated at build time
+// @ts-expect-error `.open-next/worker.ts` is generated at build time
 export { DOQueueHandler, DOShardedTagCache } from "./.open-next/worker.js";

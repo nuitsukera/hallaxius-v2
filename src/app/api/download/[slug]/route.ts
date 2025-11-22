@@ -1,65 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { type NextRequest, NextResponse } from "next/server";
+import { getFile } from "@/lib/api/download";
 
-export async function GET(
-	req: NextRequest,
-	{ params }: { params: Promise<{ slug: string }> },
-) {
+export async function GET(req: NextRequest) {
 	try {
-		const { slug } = await params;
+		const { searchParams } = new URL(req.url);
+		const slug = searchParams.get("slug");
 
-		const record = await prisma.upload.findUnique({
-			where: { slug },
-			select: {
-				filename: true,
-				expiresAt: true,
-			},
-		});
-
-		if (!record) {
-			return NextResponse.json({ error: "File not found" }, { status: 404 });
+		if (!slug) {
+			return NextResponse.json({ error: "Slug is required" }, { status: 400 });
 		}
 
-		const isExpired =
-			record.expiresAt && new Date(record.expiresAt) < new Date();
-		if (isExpired) {
-			return NextResponse.json({ error: "File expired" }, { status: 410 });
-		}
+		const response = await getFile(slug);
 
-		const r2Url = `${process.env.R2_PUBLIC_BASE_URL}/${slug}/${encodeURIComponent(record.filename)}`;
-
-		const fileResponse = await fetch(r2Url);
-
-		if (!fileResponse.ok) {
-			return NextResponse.json(
-				{ error: "Failed to fetch file" },
-				{ status: 500 },
-			);
-		}
-
-		const headers = new Headers();
-		headers.set(
-			"Content-Disposition",
-			`attachment; filename="${encodeURIComponent(record.filename)}"`,
-		);
-		headers.set(
-			"Content-Type",
-			fileResponse.headers.get("Content-Type") || "application/octet-stream",
-		);
-
-		if (fileResponse.headers.get("Content-Length")) {
-			headers.set(
-				"Content-Length",
-				fileResponse.headers.get("Content-Length") || "",
-			);
-		}
-
-		return new NextResponse(fileResponse.body, {
-			status: 200,
-			headers,
-		});
+		return response;
 	} catch (error) {
-		console.error("Download error:", error);
+		console.error("API error:", error);
 		return NextResponse.json(
 			{ error: "Internal server error" },
 			{ status: 500 },

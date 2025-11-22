@@ -5,7 +5,7 @@ import ErrorPage from "@/components/pages/ErrorPage";
 import FileViewPage from "@/components/pages/FileViewPage";
 import { getFileUrl } from "@/lib/url";
 import Loading from "@/components/ui/loading";
-import {
+import type {
 	SlugPageContentProps,
 	UploadRecord,
 	ApiResponse,

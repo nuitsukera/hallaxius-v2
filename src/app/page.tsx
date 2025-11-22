@@ -1,13 +1,9 @@
-import { StaggerContainer, FadeInUp, FadeOut } from "@/components/animations";
+import { StaggerContainer, FadeInUp } from "@/components/animations";
 import UploadPage from "@/components/pages/UploadPage";
-import { Header } from "@/components/Header";
 
 export default function Home() {
 	return (
 		<>
-			<FadeOut>
-				<Header />
-			</FadeOut>
 			<div className="min-h-screen flex flex-col">
 				<StaggerContainer className="flex-1 overflow-hidden">
 					<FadeInUp className="h-full">

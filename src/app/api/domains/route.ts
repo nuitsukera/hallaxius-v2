@@ -1,25 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getFormattedDomains } from "@/lib/api/domains";
 
 export async function GET() {
 	try {
-		const domains = (await prisma.domain.findMany({
-			select: {
-				id: true,
-				domain: true,
-				subdomain: true,
-			},
-			orderBy: {
-				domain: "asc",
-			},
-		})) as Array<{ id: string; domain: string; subdomain: string | null }>;
-
-		const formattedDomains = domains.map((d) => ({
-			id: d.id,
-			value: d.subdomain ? `${d.subdomain}.${d.domain}` : d.domain,
-			label: d.subdomain ? `${d.subdomain}.${d.domain}` : d.domain,
-		}));
-
+		const formattedDomains = await getFormattedDomains();
 		return NextResponse.json(formattedDomains);
 	} catch (error) {
 		console.error("Error fetching domains:", error);

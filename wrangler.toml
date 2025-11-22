@@ -1,0 +1,54 @@
+name = "hallaxius-v2"
+main = "worker.ts"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat_v2", "global_fetch_strictly_public"]
+
+[assets]
+binding = "ASSETS"
+directory = ".open-next/assets"
+
+[observability]
+enabled = true
+
+[[triggers.crons]]
+cron = "0 */1 * * *"
+
+[[r2_buckets]]
+binding = "NEXT_INC_CACHE_R2_BUCKET"
+bucket_name = "hallaxius"
+
+[[r2_buckets]]
+binding = "UPLOADS_R2_BUCKET"
+bucket_name = "hallaxius"
+
+[vars]
+# Public variables (can be exposed if needed)
+NEXT_PUBLIC_R2_PUBLIC_BASE_URL = "https://r2.hallaxi.us"
+NEXT_PUBLIC_APP_URL = "https://hallaxius.us"
+
+# Private variables (server-side only)
+R2_PUBLIC_BASE_URL = "https://r2.hallaxi.us"
+DATABASE_URL = "prisma+postgres://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqd3RfaWQiOjEsInNlY3VyZV9rZXkiOiJza19ZUThGMlZEN1BzYTEwLTJyU1VTdzAiLCJhcGlfa2V5IjoiMDFLQU1NWVRSQ1E3MVBBMjBFWEc3UlAyQlMiLCJ0ZW5hbnRfaWQiOiI2Yjg4ZDNjZTY3YzM5ODA1ZjFmYzNjYTIxYjExYWE3MGIxYjA0YmJjMWI4YzgwMzkzMjFiMmM2YjYwNDUzYmE1IiwiaW50ZXJuYWxfc2VjcmV0IjoiNTU3ZDZmMDQtNDE0YS00ODE4LTkzZTUtMmIyMWVhMjE2ZTdlIn0.L37IHbHExcGjKQMEHiIXOmVN6Gmd46HBCvIo3isOO_o"
+NEXTJS_ENV = "production"
+
+# Cloudflare Settings
+CLOUDFLARE_ACCOUNT_ID = "f5bd30da52ab964dace455290ef4183a"
+CLOUDFLARE_API_TOKEN = "DXsP5PpyOzeE8c0Q6LgWUENkAFguk8adnyNvrXEt"
+
+# R2 Settings
+R2_ACCESS_KEY_ID = "f0c3d8781e9fe8a15587694242fa7605"
+R2_SECRET_ACCESS_KEY = "f9c84488fb5d0f5f57f119c0c71eca9a759bf78b356b2e01a4cd5eb142aec672"
+R2_BUCKET_NAME = "hallaxius"
+R2_ENDPOINT = "https://f5bd30da52ab964dace455290ef4183a.r2.cloudflarestorage.com"
+
+# Cron secret
+CRON_SECRET = "1383dffdd5c4bf26c3702d878f05aae1da2e8eebf03a358744177edbb15b455ea1596d9b28f52ae0e15b2086004bfe098fb6298ace75c3a2b0888ed44e06e2c7"
+
+[env.production.vars]
+NEXT_PUBLIC_R2_PUBLIC_BASE_URL = "https://r2.hallaxi.us"
+NEXT_PUBLIC_APP_URL = "https://hallaxius.us"
+R2_PUBLIC_BASE_URL = "https://r2.hallaxi.us"
+DATABASE_URL = "prisma+postgres://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqd3RfaWQiOjEsInNlY3VyZV9rZXkiOiJza19ZUThGMlZEN1BzYTEwLTJyU1VTdzAiLCJhcGlfa2V5IjoiMDFLQU1NWVRSQ1E3MVBBMjBFWEc3UlAyQlMiLCJ0ZW5hbnRfaWQiOiI2Yjg4ZDNjZTY3YzM5ODA1ZjFmYzNjYTIxYjExYWE3MGIxYjA0YmJjMWI4YzgwMzkzMjFiMmM2YjYwNDUzYmE1IiwiaW50ZXJuYWxfc2VjcmV0IjoiNTU3ZDZmMDQtNDE0YS00ODE4LTkzZTUtMmIyMWVhMjE2ZTdlIn0.L37IHbHExcGjKQMEHiIXOmVN6Gmd46HBCvIo3isOO_o"
+CLOUDFLARE_ACCOUNT_ID = "f5bd30da52ab964dace455290ef4183a"
+CLOUDFLARE_API_TOKEN = "DXsP5PpyOzeE8c0Q6LgWUENkAFguk8adny
+NEXTJS_ENV = "production"

@@ -1,6 +1,6 @@
 {
 	"name": "hallaxius-v2",
-	"version": "0.1.9",
+	"version": "0.2.0",
 	"private": true,
 	"scripts": {
 		"dev": "next dev --turbopack",
@@ -33,6 +33,8 @@
 		"@radix-ui/react-switch": "^1.2.6",
 		"@radix-ui/react-tabs": "^1.1.13",
 		"@sapphire/snowflake": "^3.5.5",
+		"@vidstack/player": "^0.13.3",
+		"@vidstack/player-react": "^1.6.0",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"dotenv": "^17.2.3",
@@ -44,7 +46,8 @@
 		"react": "19.1.0",
 		"react-dom": "19.1.0",
 		"sonner": "^2.0.7",
-		"tailwind-merge": "^3.3.1"
+		"tailwind-merge": "^3.3.1",
+		"uuid": "^13.0.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.4",
